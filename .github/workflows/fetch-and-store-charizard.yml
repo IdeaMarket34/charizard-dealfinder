@@ -1,7 +1,17 @@
 name: Fetch And Store Charizard Listings
 
+name: Fetch And Store Charizard Listings
+
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 12,18,23 * * *'
+
+jobs:
+  fetch-store:
+    runs-on: ubuntu-latest
+    steps:
+      ...
 
 jobs:
   fetch-store:
