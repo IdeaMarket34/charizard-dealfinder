@@ -1,0 +1,33 @@
+name: eBay Auth Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  auth-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get eBay app token
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+        run: |
+          auth=$(printf '%s:%s' "$EBAY_CLIENT_ID" "$EBAY_CLIENT_SECRET" | base64)
+          response=$(curl -s -X POST 'https://api.ebay.com/identity/v1/oauth2/token' \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Authorization: Basic $auth" \
+            -d 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope')
+
+          echo "$response" > response.json
+          python - <<'PY'
+import json, sys
+with open('response.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+if 'access_token' not in data:
+    print('Auth failed. Full response:')
+    print(json.dumps(data, indent=2))
+    sys.exit(1)
+print('Success: eBay access token received.')
+print('Token type:', data.get('token_type'))
+print('Expires in:', data.get('expires_in'))
+PY
