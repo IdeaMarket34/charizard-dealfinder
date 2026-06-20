@@ -1,7 +1,5 @@
 name: Fetch And Store Charizard Listings
 
-name: Fetch And Store Charizard Listings
-
 on:
   workflow_dispatch:
   schedule:
@@ -10,12 +8,7 @@ on:
 jobs:
   fetch-store:
     runs-on: ubuntu-latest
-    steps:
-      ...
 
-jobs:
-  fetch-store:
-    runs-on: ubuntu-latest
     steps:
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -88,25 +81,31 @@ jobs:
               print(f"Fetched {len(items)} listings from eBay.")
 
               print("Step 3: Connecting to Supabase...")
-              print("DATABASE_URL starts with:", database_url[:35])
 
               with psycopg.connect(database_url) as conn:
                   with conn.cursor() as cur:
                       stored = 0
+
                       for item in items:
                           ebay_item_id = item.get("itemId")
                           title = item.get("title")
                           item_web_url = item.get("itemWebUrl")
+
                           price = item.get("price") or {}
                           price_value = price.get("value")
                           price_currency = price.get("currency")
+
                           condition = item.get("condition")
+
                           image = item.get("image") or {}
                           image_url = image.get("imageUrl")
+
                           seller = item.get("seller") or {}
                           seller_username = seller.get("username")
+
                           listing_start = item.get("itemCreationDate")
                           listing_end = item.get("itemEndDate")
+
                           raw_json = json.dumps(item)
 
                           if not ebay_item_id or not title:
@@ -159,10 +158,11 @@ jobs:
                           ))
                           stored += 1
 
-                      conn.commit()
-                      print(f"Stored or updated {stored} listings in Supabase.")
+                  conn.commit()
 
-          except Exception as e:
+              print(f"Stored or updated {stored} listings in Supabase.")
+
+          except Exception:
               print("REAL ERROR:")
               traceback.print_exc()
               raise
