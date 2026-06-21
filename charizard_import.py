@@ -152,8 +152,7 @@ def map_item_to_sold_comp(item: dict) -> dict:
 
 
 def insert_rows(rows):
-    return supabase.table("sold_comps").insert(rows).execute()
-
+    return supabase.table("sold_comps").upsert(rows, on_conflict="source,external_comp_id").execute()
 
 def main():
     print("Getting eBay token...")
