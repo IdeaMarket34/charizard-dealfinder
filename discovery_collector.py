@@ -80,6 +80,7 @@ def mark_search_plan_run(plan_id: str, result_count: int) -> None:
 
 
 def build_filter_param(filter_json: Dict[str, Any]) -> Optional[str]:
+    # Temporarily disable filters so we can confirm basic discovery works
     return None
 
 
