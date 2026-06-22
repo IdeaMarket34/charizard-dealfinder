@@ -5,6 +5,12 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import base64
+
+EBAY_CLIENT_ID = os.environ["EBAY_CLIENT_ID"]
+EBAY_CLIENT_SECRET = os.environ["EBAY_CLIENT_SECRET"]
+EBAY_REFRESH_TOKEN = os.environ["EBAY_REFRESH_TOKEN"]
+
 import requests
 from dotenv import load_dotenv
 from supabase import create_client
@@ -13,7 +19,6 @@ from supabase import create_client
 load_dotenv()
 
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
-EBAY_ACCESS_TOKEN = os.environ.get("EBAY_ACCESS_TOKEN", "")
 EBAY_MARKETPLACE_ID = os.environ.get("EBAY_MARKETPLACE_ID", "EBAY_US")
 MAX_SEARCH_CALLS_PER_RUN = int(os.environ.get("MAX_SEARCH_CALLS_PER_RUN", "250"))
 PAGE_SIZE = min(int(os.environ.get("DISCOVERY_PAGE_SIZE", "200")), 200)
@@ -28,10 +33,27 @@ def payload_hash(payload: dict) -> str:
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode()).hexdigest()
 
+def get_ebay_access_token() -> str:
+    token_url = "https://api.ebay.com/identity/v1/oauth2/token"
+    basic = base64.b64encode(f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {basic}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": EBAY_REFRESH_TOKEN,
+        "scope": "https://api.ebay.com/oauth/api_scope",
+    }
+    response = requests.post(token_url, headers=headers, data=data, timeout=30)
+    response.raise_for_status()
+    return response.json()["access_token"]
+
 
 def get_headers() -> Dict[str, str]:
+    access_token = get_ebay_access_token()
     return {
-        "Authorization": f"Bearer {EBAY_ACCESS_TOKEN}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
