@@ -145,12 +145,10 @@ def fetch_item_detail(access_token: str, source_listing_id: str) -> Dict[str, An
 
 def build_market_listing_patch(detail: Dict[str, Any]) -> Dict[str, Any]:
     shipping_value = None
-    shipping_currency = None
     shipping_opts = detail.get("shippingOptions") or []
     if shipping_opts:
         cost = shipping_opts[0].get("shippingCost") or {}
         shipping_value = cost.get("value")
-        shipping_currency = cost.get("currency")
 
     image = detail.get("image") or {}
     seller = detail.get("seller") or {}
@@ -175,7 +173,6 @@ def build_market_listing_patch(detail: Dict[str, Any]) -> Dict[str, Any]:
         "current_price_value": float(price["value"]) if price.get("value") is not None else None,
         "current_price_currency": price.get("currency"),
         "shipping_value": float(shipping_value) if shipping_value is not None else None,
-        "shipping_currency": shipping_currency,
         "item_location": item_location.get("country") or item_location.get("city"),
         "primary_image_url": image.get("imageUrl"),
         "condition_text": condition,
