@@ -84,14 +84,15 @@ def build_filter_param(filter_json: Dict[str, Any]) -> Optional[str]:
 
     buying_options = filter_json.get("buyingOptions") or []
     if buying_options:
-        filters.append("buyingOptions:{%s}" % "|".join(buying_options))
+        filters.append("buyingOptions:{%s}" % "|".join(str(x) for x in buying_options))
 
     min_price = filter_json.get("minPrice")
     max_price = filter_json.get("maxPrice")
+    currency = filter_json.get("priceCurrency") or "USD"
     if min_price is not None or max_price is not None:
         lo = "*" if min_price is None else str(min_price)
         hi = "*" if max_price is None else str(max_price)
-        filters.append(f"price:[{lo}..{hi}]")
+        filters.append(f"price:[{lo}..{hi}],priceCurrency:{currency}")
 
     category_ids = filter_json.get("categoryIds") or []
     if category_ids:
