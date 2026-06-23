@@ -1,4 +1,5 @@
 import os
+import requests
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -39,7 +40,54 @@ def fetch_sold_results(provider: str, query_text: str, limit: int = 100) -> List
 
 
 def fetch_sold_results_soldcomps(query_text: str, limit: int = 100) -> List[Dict]:
-    raise NotImplementedError("wire SoldComps HTTP call here")
+    api_key = os.environ["SOLDCOMPS_API_KEY"]
+
+    response = requests.get(
+        "https://sold-comps.com/api/v1/search",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        },
+        params={
+            "query": query_text,
+            "limit": min(limit, 100),
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    items = data.get("results", [])
+    normalized: List[Dict] = []
+
+    for item in items:
+        record_id = (
+            item.get("id")
+            or item.get("itemId")
+            or item.get("listingId")
+            or item.get("url")
+        )
+        if not record_id:
+            continue
+
+        normalized.append({
+            "provider": "soldcomps",
+            "provider_record_id": str(record_id),
+            "title": item.get("title") or "",
+            "item_web_url": item.get("url") or item.get("itemWebUrl"),
+            "sold_at": item.get("soldAt") or item.get("dateSold") or item.get("endedAt"),
+            "sold_price_value": item.get("soldPrice") or item.get("price"),
+            "sold_price_currency": item.get("currency") or "USD",
+            "shipping_value": item.get("shippingPrice"),
+            "condition_text": item.get("condition"),
+            "listing_format": item.get("listingType"),
+            "seller_name": item.get("sellerName"),
+            "quantity_sold": item.get("quantitySold"),
+            "search_query": query_text,
+            "raw_json": item,
+        })
+
+    return normalized
 
 
 def insert_raw_rows(rows: List[Dict]) -> int:
