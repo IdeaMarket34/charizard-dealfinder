@@ -43,30 +43,34 @@ def fetch_sold_results_soldcomps(query_text: str, limit: int = 100) -> List[Dict
     api_key = os.environ["SOLDCOMPS_API_KEY"]
 
     response = requests.get(
-        "https://sold-comps.com/api/v1/search",
+        "https://api.sold-comps.com/v1/scrape",
         headers={
             "Authorization": f"Bearer {api_key}",
-            "Accept": "application/json",
         },
         params={
-            "query": query_text,
-            "limit": min(limit, 100),
+            "keyword": query_text,
+            "page": 1,
+            "count": min(limit, 240),
+            "daysToScrape": 30,
+            "ebaySite": "ebay.com",
+            "sortOrder": "endedRecently",
         },
         timeout=60,
     )
+
+    print({
+        "status_code": response.status_code,
+        "url": response.url,
+    })
+
     response.raise_for_status()
     data = response.json()
 
-    items = data.get("results", [])
+    items = data.get("items", [])
     normalized: List[Dict] = []
 
     for item in items:
-        record_id = (
-            item.get("id")
-            or item.get("itemId")
-            or item.get("listingId")
-            or item.get("url")
-        )
+        record_id = item.get("itemId") or item.get("url")
         if not record_id:
             continue
 
@@ -74,15 +78,15 @@ def fetch_sold_results_soldcomps(query_text: str, limit: int = 100) -> List[Dict
             "provider": "soldcomps",
             "provider_record_id": str(record_id),
             "title": item.get("title") or "",
-            "item_web_url": item.get("url") or item.get("itemWebUrl"),
-            "sold_at": item.get("soldAt") or item.get("dateSold") or item.get("endedAt"),
-            "sold_price_value": item.get("soldPrice") or item.get("price"),
-            "sold_price_currency": item.get("currency") or "USD",
+            "item_web_url": item.get("url"),
+            "sold_at": item.get("endedAt"),
+            "sold_price_value": item.get("soldPrice"),
+            "sold_price_currency": item.get("soldCurrency") or "USD",
             "shipping_value": item.get("shippingPrice"),
             "condition_text": item.get("condition"),
-            "listing_format": item.get("listingType"),
-            "seller_name": item.get("sellerName"),
-            "quantity_sold": item.get("quantitySold"),
+            "listing_format": None,
+            "seller_name": item.get("sellerUsername"),
+            "quantity_sold": None,
             "search_query": query_text,
             "raw_json": item,
         })
