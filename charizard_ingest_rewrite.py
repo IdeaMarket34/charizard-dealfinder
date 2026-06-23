@@ -376,6 +376,16 @@ def extract_variant(t: str) -> Optional[str]:
             return value
     return None
 
+def has_strong_single_card_signal(parsed, title_norm: str) -> bool:
+    if parsed.promo_code_guess:
+        return True
+    if parsed.card_fraction_norm or parsed.card_number_norm:
+        return True
+    if parsed.grade_company or parsed.grade_value is not None:
+        return True
+    if re.search(r"\bpromo\b", title_norm):
+        return True
+    return False
 
 def parse_listing_title(title: str) -> ParsedTitle:
     t = normalize_text(title)
