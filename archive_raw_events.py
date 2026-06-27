@@ -1,34 +1,44 @@
 """
-archive_raw_events.py
+archive_raw_events.py (v2)
 
-Exports raw_market_events rows older than ARCHIVE_THRESHOLD_DAYS to
-Backblaze B2 (one gzipped NDJSON file per calendar day), then deletes
-those rows from Postgres -- but ONLY after the upload is confirmed
-written, and ONLY for days that aren't already in the archive log.
+CHANGED FROM v1: eligibility is no longer based on age alone. Rows are
+exported/deleted once they've ACTUALLY been processed downstream:
 
-Safety:
-- DRY_RUN=true (default) exports and logs but never deletes from Postgres.
-  Set DRY_RUN=false only after confirming:
-    1. 0_verify_payload_duplication.sql showed 0 (unrelated table, but
-       same "don't delete until verified" principle applies here)
-    2. 2_check_fk_references.sql showed no rows referencing
-       raw_market_events.id, OR you've added handling for any that exist
-    3. You've run this once in dry-run mode and spot-checked the
-       uploaded files in B2 against the source rows
+  - 'detail' events: eligible once a matching listing_history row exists
+    (i.e. parser_worker has consumed it). Every detail event becomes its
+    own listing_history row on purpose (that's price history over time),
+    so detail events are never "superseded" -- only "processed".
 
-Resumable: re-running is always safe. Already-archived days are skipped
-(tracked in raw_market_events_archive_log). If the script crashes
-mid-run, just run it again.
+  - 'summary' events: eligible once a NEWER summary event exists for the
+    same listing. discovery_collector.py's dedupe check
+    (get_latest_event_hashes) only ever needs the latest summary event
+    per listing, so once a listing has a newer summary row, the older
+    one is just history nothing reads again.
+
+  - FORCE_ARCHIVE_AFTER_DAYS (default 30): a backstop, not the primary
+    mechanism. Rows older than this get archived/deleted regardless of
+    the above, so permanently stuck rows (e.g. a job that exhausted all
+    its retries and will never get parsed) don't sit forever. NOTE: this
+    means a stuck row IS allowed to be deleted before it's ever
+    processed, once it's this old -- that's an intentional tradeoff
+    (better than holding space forever for something that's never going
+    to complete), but worth knowing.
+
+Still gzipped NDJSON to B2, still upload-confirmed (head_object) before
+any delete, still defaults to DRY_RUN=true.
+
+REQUIRES: run 9_add_archived_to_b2_column.sql first (adds the
+archived_to_b2_at column this script reads/writes).
 
 Required environment variables:
-    DATABASE_URL        Postgres connection string (same one the other
-                         worker scripts use)
-    B2_ENDPOINT          e.g. https://s3.us-west-004.backblazeb2.com
-    B2_KEY_ID             Backblaze application key ID
-    B2_APPLICATION_KEY    Backblaze application key secret
-    B2_BUCKET             bucket name
-    ARCHIVE_THRESHOLD_DAYS  optional, default 90
-    DRY_RUN               optional, default "true"
+    DATABASE_URL
+    B2_ENDPOINT, B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET
+    DRY_RUN                    optional, default "true"
+    BATCH_SIZE                 optional, default 2000 (rows per B2 file)
+    MAX_BATCHES_PER_RUN        optional, default 25 (per phase, per run)
+    FORCE_ARCHIVE_AFTER_DAYS   optional, default 30 (replaces the old
+                                ARCHIVE_THRESHOLD_DAYS=90 -- if you had
+                                that set anywhere, it's no longer read)
 """
 
 import os
@@ -37,7 +47,8 @@ import json
 import gzip
 import io
 import logging
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timezone, timedelta
 
 import boto3
 import psycopg2
@@ -54,14 +65,18 @@ B2_ENDPOINT = os.environ["B2_ENDPOINT"]
 B2_KEY_ID = os.environ["B2_KEY_ID"]
 B2_APPLICATION_KEY = os.environ["B2_APPLICATION_KEY"]
 B2_BUCKET = os.environ["B2_BUCKET"]
-THRESHOLD_DAYS = int(os.environ.get("ARCHIVE_THRESHOLD_DAYS", "90"))
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "2000"))
+MAX_BATCHES_PER_RUN = int(os.environ.get("MAX_BATCHES_PER_RUN", "25"))
+FORCE_ARCHIVE_AFTER_DAYS = int(os.environ.get("FORCE_ARCHIVE_AFTER_DAYS", "30"))
 
-BATCH_TABLE_COLUMNS = [
+EXPORT_COLUMNS = [
     "id", "source", "source_listing_id", "event_type", "observed_at",
     "search_plan_id", "search_run_id", "payload_hash", "payload_json",
     "created_at",
 ]
+
+RUN_ID = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
 
 
 def get_b2_client():
@@ -73,54 +88,62 @@ def get_b2_client():
     )
 
 
-def get_days_needing_export(conn, cutoff_date):
-    """Days older than cutoff that have never been uploaded to B2 yet."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT DISTINCT created_at::date AS d
-            FROM raw_market_events
-            WHERE created_at::date < %s
-              AND created_at::date NOT IN (SELECT archive_date FROM raw_market_events_archive_log)
-            ORDER BY d
-            """,
-            (cutoff_date,),
-        )
-        return [row[0] for row in cur.fetchall()]
+def force_cutoff():
+    return date.today() - timedelta(days=FORCE_ARCHIVE_AFTER_DAYS)
 
 
-def get_days_needing_delete(conn, cutoff_date):
-    """Days older than cutoff that are ALREADY archived in B2 (per the log)
-    but still have rows sitting in raw_market_events -- e.g. because a
-    previous run happened during DRY_RUN. These need to be revisited so
-    the delete actually happens once DRY_RUN is off, instead of being
-    silently skipped forever just because they have a log entry."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT DISTINCT rme.created_at::date AS d
-            FROM raw_market_events rme
-            JOIN raw_market_events_archive_log log
-              ON log.archive_date = rme.created_at::date
-            WHERE rme.created_at::date < %s
-            ORDER BY d
-            """,
-            (cutoff_date,),
-        )
-        return [row[0] for row in cur.fetchall()]
-
-
-def export_day(conn, day):
-    """Fetch all rows for a given day, return list of dict rows."""
+def get_eligible_detail_batch(conn, limit):
+    """'detail' events already parsed into listing_history (parser_worker
+    has consumed them), OR older than the force cutoff regardless."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             f"""
-            SELECT {", ".join(BATCH_TABLE_COLUMNS)}
-            FROM raw_market_events
-            WHERE created_at::date = %s
-            ORDER BY created_at
+            SELECT {", ".join(EXPORT_COLUMNS)}
+            FROM raw_market_events rme
+            WHERE event_type = 'detail'
+              AND archived_to_b2_at IS NULL
+              AND (
+                EXISTS (
+                    SELECT 1 FROM listing_history lh
+                    WHERE lh.source = rme.source
+                      AND lh.source_listing_id = rme.source_listing_id
+                      AND lh.observed_at = rme.observed_at
+                )
+                OR rme.created_at::date < %s
+              )
+            ORDER BY rme.created_at
+            LIMIT %s
             """,
-            (day,),
+            (force_cutoff(), limit),
+        )
+        return cur.fetchall()
+
+
+def get_eligible_summary_batch(conn, limit):
+    """'summary' events superseded by a newer summary event for the same
+    listing (discovery_collector only ever needs the latest one per
+    listing for its dedupe check), OR older than the force cutoff."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {", ".join(EXPORT_COLUMNS)}
+            FROM raw_market_events rme
+            WHERE event_type = 'summary'
+              AND archived_to_b2_at IS NULL
+              AND (
+                EXISTS (
+                    SELECT 1 FROM raw_market_events newer
+                    WHERE newer.event_type = 'summary'
+                      AND newer.source = rme.source
+                      AND newer.source_listing_id = rme.source_listing_id
+                      AND newer.observed_at > rme.observed_at
+                )
+                OR rme.created_at::date < %s
+              )
+            ORDER BY rme.created_at
+            LIMIT %s
+            """,
+            (force_cutoff(), limit),
         )
         return cur.fetchall()
 
@@ -129,28 +152,22 @@ def rows_to_gzipped_ndjson(rows):
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
         for row in rows:
-            # default=str handles datetimes, UUIDs, etc.
             gz.write((json.dumps(dict(row), default=str) + "\n").encode("utf-8"))
     buf.seek(0)
     return buf
 
 
-def b2_key_for_day(day):
-    return f"raw_market_events/{day.year:04d}/{day.month:02d}/{day.isoformat()}.jsonl.gz"
+def export_and_mark_batch(conn, b2, rows, label, batch_num):
+    if not rows:
+        return 0
 
-
-def archive_one_day(conn, b2, day):
-    rows = export_day(conn, day)
-    row_count = len(rows)
-    if row_count == 0:
-        log.info("No rows for %s, marking as archived with 0 rows.", day)
-        mark_archived(conn, day, 0, None)
-        return
-
-    key = b2_key_for_day(day)
+    key = (
+        f"raw_market_events/processed/{date.today().isoformat()}/"
+        f"{label}-{RUN_ID}-batch{batch_num:04d}.jsonl.gz"
+    )
     body = rows_to_gzipped_ndjson(rows)
 
-    log.info("Uploading %d rows for %s to b2://%s/%s", row_count, day, B2_BUCKET, key)
+    log.info("Uploading %d %s rows to b2://%s/%s", len(rows), label, B2_BUCKET, key)
     b2.upload_fileobj(body, B2_BUCKET, key)
 
     # Confirm the object actually landed before we trust it
@@ -158,76 +175,81 @@ def archive_one_day(conn, b2, day):
     if head["ContentLength"] == 0:
         raise RuntimeError(f"Uploaded object {key} is empty, refusing to mark as archived")
 
-    mark_archived(conn, day, row_count, key)
-    delete_day_if_live(conn, day, row_count)
-    conn.commit()
-
-
-def delete_day_if_live(conn, day, row_count):
-    """Delete a day's rows from Postgres, but only if DRY_RUN is off.
-    Safe to call for a day that's already archived but not yet deleted
-    (e.g. left over from an earlier dry run)."""
-    if DRY_RUN:
-        log.info("DRY_RUN=true: skipping delete for %s (%d rows would be deleted)", day, row_count)
-    else:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM raw_market_events WHERE created_at::date = %s",
-                (day,),
-            )
-        log.info("Deleted %d rows for %s from raw_market_events", row_count, day)
-
-
-def mark_archived(conn, day, row_count, key):
+    ids = [row["id"] for row in rows]
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO raw_market_events_archive_log (archive_date, row_count, b2_key)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (archive_date) DO NOTHING
-            """,
-            (day, row_count, key or "no-rows"),
+            "UPDATE raw_market_events SET archived_to_b2_at = %s WHERE id = ANY(%s::uuid[])",
+            (datetime.now(timezone.utc), ids),
         )
+    conn.commit()
+    log.info("Marked %d %s rows as archived_to_b2_at (key=%s)", len(rows), label, key)
+    return len(rows)
+
+
+def delete_archived_batch(conn, limit):
+    """Delete rows that are already confirmed-uploaded (archived_to_b2_at
+    set) but still sitting in Postgres -- covers both rows just marked
+    this run AND any leftovers from a previous dry run."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM raw_market_events WHERE archived_to_b2_at IS NOT NULL LIMIT %s",
+            (limit,),
+        )
+        ids = [row[0] for row in cur.fetchall()]
+
+    if not ids:
+        return 0
+
+    if DRY_RUN:
+        log.info("DRY_RUN=true: would delete %d already-archived rows (skipping)", len(ids))
+        return 0
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM raw_market_events WHERE id = ANY(%s::uuid[])", (ids,))
+    conn.commit()
+    log.info("Deleted %d already-archived rows from raw_market_events", len(ids))
+    return len(ids)
+
+
+def run_export_phase(conn, b2, fetch_fn, label):
+    total = 0
+    for batch_num in range(MAX_BATCHES_PER_RUN):
+        rows = fetch_fn(conn, BATCH_SIZE)
+        if not rows:
+            break
+        total += export_and_mark_batch(conn, b2, rows, label, batch_num)
+    return total
 
 
 def main():
-    cutoff_date = date.today() - timedelta(days=THRESHOLD_DAYS)
     log.info(
-        "Starting archive run. Cutoff date: %s. DRY_RUN=%s",
-        cutoff_date, DRY_RUN,
+        "Starting archive run %s. DRY_RUN=%s, BATCH_SIZE=%d, FORCE_ARCHIVE_AFTER_DAYS=%d",
+        RUN_ID, DRY_RUN, BATCH_SIZE, FORCE_ARCHIVE_AFTER_DAYS,
     )
 
     conn = psycopg2.connect(DATABASE_URL)
     b2 = get_b2_client()
 
     try:
-        export_days = get_days_needing_export(conn, cutoff_date)
-        delete_days = get_days_needing_delete(conn, cutoff_date)
+        detail_exported = run_export_phase(conn, b2, get_eligible_detail_batch, "detail")
+        summary_exported = run_export_phase(conn, b2, get_eligible_summary_batch, "summary")
 
-        if not export_days and not delete_days:
-            log.info("Nothing to archive or delete. All eligible days already processed.")
-            return
+        log.info(
+            "Export phase complete. detail_exported=%d summary_exported=%d",
+            detail_exported, summary_exported,
+        )
 
-        if export_days:
-            log.info(
-                "Found %d day(s) needing export: %s ... %s",
-                len(export_days), export_days[0], export_days[-1],
-            )
-            for day in export_days:
-                archive_one_day(conn, b2, day)
+        total_deleted = 0
+        for _ in range(MAX_BATCHES_PER_RUN):
+            deleted = delete_archived_batch(conn, BATCH_SIZE)
+            total_deleted += deleted
+            if deleted == 0:
+                break
 
-        if delete_days:
-            log.info(
-                "Found %d day(s) already archived but still present in Postgres "
-                "(likely from a prior dry run): %s ... %s",
-                len(delete_days), delete_days[0], delete_days[-1],
-            )
-            for day in delete_days:
-                rows = export_day(conn, day)
-                delete_day_if_live(conn, day, len(rows))
-                conn.commit()
-
-        log.info("Archive run complete.")
+        log.info(
+            "Archive run complete. detail_exported=%d summary_exported=%d deleted=%d dry_run=%s",
+            detail_exported, summary_exported, total_deleted, DRY_RUN,
+        )
     except Exception:
         conn.rollback()
         log.exception("Archive run failed, rolled back current transaction.")
