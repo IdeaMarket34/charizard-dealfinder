@@ -1,0 +1,35 @@
+name: Archive Raw Market Events
+
+# Triggered by pg_cron + pg_net via workflow_dispatch, same mechanism
+# as the other 5 scheduled jobs. Also runnable manually from the
+# Actions tab for testing.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "If true, export but do not delete from Postgres"
+        required: false
+        default: "true"
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install boto3 psycopg2-binary python-dotenv
+
+      - name: Run archive script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python archive_raw_events.py
