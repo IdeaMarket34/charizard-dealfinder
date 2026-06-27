@@ -44,14 +44,14 @@ jobs:
           try:
               with urllib.request.urlopen(req) as resp:
                   body = resp.read().decode()
-                  print(body)
                   parsed = json.loads(body)
                   if "access_token" in parsed:
                       print("Success: eBay access token received.")
                       sys.exit(0)
                   else:
+                      print("Token response did not include an access_token.")
                       sys.exit(1)
           except Exception as e:
-              print(str(e))
+              print(f"Request failed: {type(e).__name__}")
               sys.exit(1)
           PY

@@ -100,7 +100,6 @@ def insert_listing_history(market_listing_id: int, bundle: dict, observed_at: st
         "shipping_value": None,
         "condition_text": market_row.get("condition_text"),
         "title": market_row.get("raw_title"),
-        "payload_json": payload,
     }).execute()
 
 

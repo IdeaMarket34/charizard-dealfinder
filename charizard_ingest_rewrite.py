@@ -1,5 +1,6 @@
 import argparse
 import base64
+import csv
 import os
 import re
 import time
@@ -615,7 +616,7 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
         if prefix and digits:
             promo_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata")
+                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("promo_prefix", prefix.group(0).upper())
                 .eq("card_number_norm", str(int(digits.group(1))))
@@ -638,7 +639,7 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
             set_id = set_result.data[0]["id"]
             card_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata")
+                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("set_id", set_id)
                 .eq("card_number_norm", card_num)
@@ -653,7 +654,7 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
     if card_num and card_total:
         num_result = (
             supabase.table("pokemon_cards")
-            .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata")
+            .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
             .eq("pokemon_name", parsed.pokemon_name)
             .eq("card_number_norm", card_num)
             .eq("total_in_set", card_total)
@@ -677,7 +678,7 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
             set_id = set_result.data[0]["id"]
             card_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata")
+                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("set_id", set_id)
                 .eq("card_number_norm", card_num)
@@ -862,6 +863,39 @@ def enrich_items_with_details_concurrent(access_token: str, items: List[dict], m
     return enriched
 
 
+def normalize_charizard_key_from_match(matched_card: dict, parsed: "ParsedTitle") -> str:
+    """Build the group/identity key from the matched reference card rather than
+    from per-listing parsed text. This is what makes "same card -> same group"
+    reliable: two listings that matched the same catalog row always get the same
+    key, even if their titles were worded differently or one was missing a set
+    name. Falls back to the set_guess on the parsed title only if the catalog
+    lookup didn't carry set_key (shouldn't normally happen)."""
+    set_part = (
+        (matched_card.get("pokemon_sets") or {}).get("set_key")
+        or parsed.set_guess
+        or "unknown_set"
+    )
+
+    if matched_card.get("promo_prefix") and matched_card.get("card_number_norm"):
+        try:
+            num_str = str(int(matched_card["card_number_norm"])).zfill(3)
+        except (TypeError, ValueError):
+            num_str = str(matched_card["card_number_norm"])
+        identity_part = f"{matched_card['promo_prefix'].lower()}{num_str}"
+    elif matched_card.get("card_number_norm") and matched_card.get("total_in_set"):
+        identity_part = f"{matched_card['card_number_norm']}_{matched_card['total_in_set']}"
+    elif matched_card.get("card_number_norm"):
+        identity_part = str(matched_card["card_number_norm"])
+    else:
+        identity_part = "unresolved"
+
+    if parsed.grade_company and parsed.grade_value is not None:
+        grade_num = int(parsed.grade_value) if float(parsed.grade_value).is_integer() else parsed.grade_value
+        return f"charizard_{set_part}_{identity_part}_{parsed.grade_company.lower()}_{grade_num}"
+
+    return f"charizard_{set_part}_{identity_part}_raw"
+
+
 def normalize_charizard_key_from_parsed(parsed: ParsedTitle) -> str:
     if parsed.pokemon_name != "charizard":
         return "other_non_charizard"
@@ -941,18 +975,29 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
         parsed.is_junk = True
         parsed.junk_reason = parsed.junk_reason or "proxy_or_custom"
 
+    if not parsed.set_guess and aspect_data.get("set_name"):
+        parsed.set_guess = detect_set_from_text(normalize_text(aspect_data["set_name"])) or normalize_set_key(aspect_data["set_name"])
+
     resolved_set = get_or_create_set(parsed.set_guess, aspect_data)
     if resolved_set and resolved_set.get("set_key"):
         parsed.set_guess = resolved_set["set_key"]
 
-    normalized_item_key = normalize_charizard_key_from_parsed(parsed)
+    # Match against the catalog FIRST, then derive the group key from the match
+    # itself when one exists. This is what keeps grouping locked to the catalog's
+    # identity rather than to whatever the listing title happened to say -- two
+    # listings for the same physical card always land in the same group, even if
+    # one title omitted the set name or phrased it differently.
+    matched_card = match_reference_card(parsed, aspect_data)
+    if matched_card:
+        normalized_item_key = normalize_charizard_key_from_match(matched_card, parsed)
+    else:
+        normalized_item_key = normalize_charizard_key_from_parsed(parsed)
 
     price = item.get("price", {}) or {}
     price_value = float(price.get("value")) if price.get("value") else None
     currency = price.get("currency", "USD")
     item_id = item.get("itemId")
     item_url = item.get("itemWebUrl")
-    matched_card = match_reference_card(parsed, aspect_data)
 
     market_listing_row = {
         "source": "ebay",
@@ -1021,6 +1066,8 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
             "aspect_data": aspect_data,
             "resolved_set_id": resolved_set["id"] if resolved_set else None,
             "resolved_set_name": resolved_set["set_name"] if resolved_set else None,
+            "resolved_set_key": resolved_set["set_key"] if resolved_set else None,
+            "final_set_guess": parsed.set_guess,
         },
     }
 
@@ -1036,6 +1083,135 @@ def chunked(seq: List[dict], size: int):
     for i in range(0, len(seq), size):
         yield seq[i:i + size]
 
+
+
+def load_parsed_csv_rows(csv_path: str) -> List[dict]:
+    rows: List[dict] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def build_market_listing_id_map_from_parsed_source_ids(source_ids: List[str]) -> Dict[str, int]:
+    listing_id_map: Dict[str, int] = {}
+    unique_ids = sorted({sid for sid in source_ids if sid})
+    for id_chunk in chunked(unique_ids, 200):
+        result = (
+            supabase.table("market_listings")
+            .select("id,source_listing_id")
+            .eq("source", "ebay")
+            .in_("source_listing_id", id_chunk)
+            .execute()
+        )
+        for row in result.data or []:
+            listing_id_map[row["source_listing_id"]] = row["id"]
+    return listing_id_map
+
+
+def infer_grade_company_from_variant(variant: Optional[str]) -> Optional[str]:
+    return None
+
+
+def infer_grade_value_from_variant(variant: Optional[str]) -> Optional[float]:
+    return None
+
+
+def import_parsed_csv_to_listing_parses(csv_path: str) -> None:
+    parsed_rows = load_parsed_csv_rows(csv_path)
+    print(f"Loaded {len(parsed_rows)} parsed CSV rows from {csv_path}")
+
+    source_ids = [row.get("source_record_id") for row in parsed_rows if row.get("source_record_id")]
+    listing_id_map = build_market_listing_id_map_from_parsed_source_ids(source_ids)
+    print(f"Matched {len(listing_id_map)} market_listings rows by source_listing_id")
+
+    parse_rows: List[dict] = []
+    skipped_missing_listing = 0
+
+    for row in parsed_rows:
+        source_record_id = row.get("source_record_id")
+        market_listing_id = listing_id_map.get(source_record_id)
+
+        if not market_listing_id:
+            skipped_missing_listing += 1
+            continue
+
+        set_guess = (row.get("set_slug") or row.get("set_name") or "").strip() or None
+        card_number_guess = (row.get("card_number") or "").strip() or None
+        promo_code_guess = (row.get("promo_code") or "").strip() or None
+        variant_guess = (row.get("variant") or "").strip() or None
+        language_guess = (row.get("language") or "").strip() or None
+        identity_status = (row.get("identity_status") or "").strip() or None
+        identity_confidence_raw = (row.get("identity_confidence") or "").strip()
+
+        card_number_norm = None
+        card_total_guess = None
+        card_fraction_norm = None
+
+        if card_number_guess:
+            raw, num, total, fraction = extract_fraction_fields(card_number_guess)
+            card_number_guess = raw or card_number_guess
+            card_number_norm = num
+            card_total_guess = total
+            card_fraction_norm = fraction
+
+            if not card_number_norm and not card_total_guess:
+                compact = _split_compact_fraction_token(card_number_guess)
+                if compact:
+                    card_number_norm, card_total_guess = compact
+                    card_fraction_norm = f"{card_number_norm}/{card_total_guess}"
+
+        match_confidence = None
+        if identity_confidence_raw:
+            try:
+                match_confidence = float(identity_confidence_raw)
+            except ValueError:
+                match_confidence = None
+
+        parser_notes = {
+            "import_source": "parsed-live-results-clean.csv",
+            "canonical_name": row.get("canonical_name"),
+            "currency": row.get("currency"),
+            "price": row.get("price"),
+            "condition_text": row.get("condition_text"),
+            "identity_status": identity_status,
+            "matched_fields": row.get("matched_fields"),
+            "unresolved_fields": row.get("unresolved_fields"),
+            "warnings": row.get("warnings"),
+            "group_label": row.get("group_label"),
+            "rule_pack": row.get("rule_pack"),
+            "rule_version": row.get("rule_version"),
+            "title": row.get("title"),
+            "set_name": row.get("set_name"),
+            "source_record_id": source_record_id,
+        }
+
+        parse_rows.append(
+            {
+                "market_listing_id": market_listing_id,
+                "parse_version": "csv_import_v1",
+                "pokemon_name": (row.get("canonical_name") or "").strip().lower() or "charizard",
+                "set_guess": set_guess,
+                "card_number_guess": card_number_guess,
+                "card_number_norm": card_number_norm,
+                "promo_code_guess": promo_code_guess,
+                "variant_guess": variant_guess,
+                "language_guess": language_guess,
+                "grade_company": infer_grade_company_from_variant(variant_guess),
+                "grade_value": infer_grade_value_from_variant(variant_guess),
+                "is_junk": False,
+                "junk_reason": None,
+                "match_confidence": match_confidence,
+                "matched_card_id": None,
+                "normalized_item_key": None,
+                "parser_notes": parser_notes,
+            }
+        )
+
+    upsert_listing_parses_batch(parse_rows, chunk_size=100)
+    print(f"Upserted {len(parse_rows)} listing_parses rows")
+    print(f"Skipped {skipped_missing_listing} parsed rows with no matching market_listing")
 
 def upsert_market_listings_batch(rows: List[dict], chunk_size: int = 100) -> Dict[str, int]:
     unique_rows = {row["source_listing_id"]: row for row in rows if row.get("source_listing_id")}
@@ -1106,7 +1282,18 @@ def main() -> None:
     parser.add_argument("--chunk-size", type=int, default=250)
     parser.add_argument("--max-workers", type=int, default=6)
     parser.add_argument("--max-items", type=int, default=1500)
+    parser.add_argument(
+        "--import-parsed-csv",
+        type=str,
+        default=None,
+        help="Path to parsed CSV file to import into listing_parses",
+    )
     args = parser.parse_args()
+
+    if args.import_parsed_csv:
+        import_parsed_csv_to_listing_parses(args.import_parsed_csv)
+        print("Done.")
+        return
 
     print("Getting eBay token...")
     token = get_ebay_access_token()
