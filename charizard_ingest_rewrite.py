@@ -212,16 +212,16 @@ class ParsedTitle:
     raw_title: str
     normalized_title: str
     pokemon_name: Optional[str]
-    set_guess: Optional[str]
+    set_code: Optional[str]
     card_number_guess: Optional[str]
-    card_number_norm: Optional[str]
+    card_number: Optional[str]
     card_total_guess: Optional[str]
     card_fraction_norm: Optional[str]
-    promo_code_guess: Optional[str]
+    promo_code: Optional[str]
     grade_company: Optional[str]
     grade_value: Optional[float]
-    language_guess: Optional[str]
-    variant_guess: Optional[str]
+    language: Optional[str]
+    variant: Optional[str]
     is_junk: bool
     junk_reason: Optional[str]
 
@@ -502,9 +502,9 @@ def extract_variant(t: str) -> Optional[str]:
     return None
 
 def has_strong_single_card_signal(parsed, title_norm: str) -> bool:
-    if parsed.promo_code_guess:
+    if parsed.promo_code:
         return True
-    if parsed.card_fraction_norm or parsed.card_number_norm:
+    if parsed.card_fraction_norm or parsed.card_number:
         return True
     if parsed.grade_company or parsed.grade_value is not None:
         return True
@@ -542,16 +542,16 @@ def parse_listing_title(title: str) -> ParsedTitle:
         raw_title=title,
         normalized_title=t,
         pokemon_name="charizard" if "charizard" in t else None,
-        set_guess=detect_set_from_text(t),
+        set_code=detect_set_from_text(t),
         card_number_guess=card_raw,
-        card_number_norm=card_norm,
+        card_number=card_norm,
         card_total_guess=card_total,
         card_fraction_norm=card_fraction,
-        promo_code_guess=extract_promo_code(t),
+        promo_code=extract_promo_code(t),
         grade_company=grade_company,
         grade_value=grade_value,
-        language_guess=extract_language(t),
-        variant_guess=extract_variant(t),
+        language=extract_language(t),
+        variant=extract_variant(t),
         is_junk=is_junk,
         junk_reason=junk_reason,
     )
@@ -627,9 +627,9 @@ def parse_aliases_field(value) -> List[str]:
     return []
 
 
-def infer_set_insert_payload(set_guess: str, aspect_data: Optional[Dict[str, Optional[str]]] = None) -> dict:
+def infer_set_insert_payload(set_code: str, aspect_data: Optional[Dict[str, Optional[str]]] = None) -> dict:
     aspect_data = aspect_data or {}
-    normalized_guess = normalize_set_key(set_guess) or "unknown_set"
+    normalized_guess = normalize_set_key(set_code) or "unknown_set"
     override = SET_CANONICAL_OVERRIDES.get(normalized_guess)
 
     set_key = override["set_key"] if override else normalized_guess
@@ -657,12 +657,12 @@ def infer_set_insert_payload(set_guess: str, aspect_data: Optional[Dict[str, Opt
     }
 
 
-def get_or_create_set(set_guess: Optional[str], aspect_data: Optional[Dict[str, Optional[str]]] = None) -> Optional[dict]:
-    if not set_guess and not (aspect_data or {}).get("set_name"):
+def get_or_create_set(set_code: Optional[str], aspect_data: Optional[Dict[str, Optional[str]]] = None) -> Optional[dict]:
+    if not set_code and not (aspect_data or {}).get("set_name"):
         return None
 
     aspect_data = aspect_data or {}
-    candidate_inputs = [set_guess, aspect_data.get("set_name")]
+    candidate_inputs = [set_code, aspect_data.get("set_name")]
     normalized_candidates = [normalize_set_key(x) for x in candidate_inputs if x]
     normalized_candidates = [x for x in normalized_candidates if x]
 
@@ -713,11 +713,11 @@ def get_or_create_set(set_guess: Optional[str], aspect_data: Optional[Dict[str, 
             return row
 
     insert_payload = infer_set_insert_payload(
-        set_guess or normalize_set_key(aspect_data.get("set_name") or "unknown_set"),
+        set_code or normalize_set_key(aspect_data.get("set_name") or "unknown_set"),
         aspect_data=aspect_data,
     )
 
-    inserted = supabase.table("pokemon_sets").upsert(insert_payload, on_conflict="set_key").execute()
+    inserted = supabase.table("pokemon_sets").insert(insert_payload).execute()
     if inserted.data:
         return inserted.data[0]
 
@@ -739,14 +739,14 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
         return None
 
     aspects = aspects or {}
-    language = (parsed.language_guess or "en").lower()
-    set_guess = parsed.set_guess
-    card_num = parsed.card_number_norm
+    language = (parsed.language or "en").lower()
+    set_code = parsed.set_code
+    card_num = parsed.card_number
     card_total = parsed.card_total_guess
-    promo_code = parsed.promo_code_guess
+    promo_code = parsed.promo_code
 
-    if not set_guess and aspects.get("set_name"):
-        set_guess = detect_set_from_text(normalize_text(aspects["set_name"])) or normalize_set_key(aspects["set_name"])
+    if not set_code and aspects.get("set_name"):
+        set_code = detect_set_from_text(normalize_text(aspects["set_name"])) or normalize_set_key(aspects["set_name"])
 
     if (not card_num or not card_total) and aspects.get("card_number_raw"):
         _, num, total, _ = extract_fraction_fields(aspects["card_number_raw"])
@@ -761,10 +761,10 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
         if prefix and digits:
             promo_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
+                .select("id,card_key,pokemon_name,set_id,card_number_raw,card_number,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("promo_prefix", prefix.group(0).upper())
-                .eq("card_number_norm", str(int(digits.group(1))))
+                .eq("card_number", str(int(digits.group(1))))
                 .eq("language", language)
                 .limit(5)
                 .execute()
@@ -772,11 +772,11 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
             if len(promo_result.data or []) == 1:
                 return promo_result.data[0]
 
-    if set_guess and card_num and card_total:
+    if set_code and card_num and card_total:
         set_result = (
             supabase.table("pokemon_sets")
             .select("id,set_key,set_name")
-            .eq("set_key", set_guess)
+            .eq("set_key", set_code)
             .limit(1)
             .execute()
         )
@@ -784,10 +784,10 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
             set_id = set_result.data[0]["id"]
             card_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
+                .select("id,card_key,pokemon_name,set_id,card_number_raw,card_number,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("set_id", set_id)
-                .eq("card_number_norm", card_num)
+                .eq("card_number", card_num)
                 .eq("total_in_set", card_total)
                 .eq("language", language)
                 .limit(5)
@@ -799,9 +799,9 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
     if card_num and card_total:
         num_result = (
             supabase.table("pokemon_cards")
-            .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
+            .select("id,card_key,pokemon_name,set_id,card_number_raw,card_number,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
             .eq("pokemon_name", parsed.pokemon_name)
-            .eq("card_number_norm", card_num)
+            .eq("card_number", card_num)
             .eq("total_in_set", card_total)
             .eq("language", language)
             .limit(10)
@@ -811,11 +811,11 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
         if len(candidates) == 1:
             return candidates[0]
 
-    if set_guess and card_num:
+    if set_code and card_num:
         set_result = (
             supabase.table("pokemon_sets")
             .select("id,set_key,set_name")
-            .eq("set_key", set_guess)
+            .eq("set_key", set_code)
             .limit(1)
             .execute()
         )
@@ -823,10 +823,10 @@ def match_reference_card(parsed: ParsedTitle, aspects: Optional[Dict[str, Option
             set_id = set_result.data[0]["id"]
             card_result = (
                 supabase.table("pokemon_cards")
-                .select("id,card_key,pokemon_name,set_id,card_number,card_number_norm,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
+                .select("id,card_key,pokemon_name,set_id,card_number_raw,card_number,total_in_set,promo_prefix,language,metadata,pokemon_sets(set_key)")
                 .eq("pokemon_name", parsed.pokemon_name)
                 .eq("set_id", set_id)
-                .eq("card_number_norm", card_num)
+                .eq("card_number", card_num)
                 .eq("language", language)
                 .limit(10)
                 .execute()
@@ -1013,24 +1013,24 @@ def normalize_charizard_key_from_match(matched_card: dict, parsed: "ParsedTitle"
     from per-listing parsed text. This is what makes "same card -> same group"
     reliable: two listings that matched the same catalog row always get the same
     key, even if their titles were worded differently or one was missing a set
-    name. Falls back to the set_guess on the parsed title only if the catalog
+    name. Falls back to the set_code on the parsed title only if the catalog
     lookup didn't carry set_key (shouldn't normally happen)."""
     set_part = (
         (matched_card.get("pokemon_sets") or {}).get("set_key")
-        or parsed.set_guess
+        or parsed.set_code
         or "unknown_set"
     )
 
-    if matched_card.get("promo_prefix") and matched_card.get("card_number_norm"):
+    if matched_card.get("promo_prefix") and matched_card.get("card_number"):
         try:
-            num_str = str(int(matched_card["card_number_norm"])).zfill(3)
+            num_str = str(int(matched_card["card_number"])).zfill(3)
         except (TypeError, ValueError):
-            num_str = str(matched_card["card_number_norm"])
+            num_str = str(matched_card["card_number"])
         identity_part = f"{matched_card['promo_prefix'].lower()}{num_str}"
-    elif matched_card.get("card_number_norm") and matched_card.get("total_in_set"):
-        identity_part = f"{matched_card['card_number_norm']}_{matched_card['total_in_set']}"
-    elif matched_card.get("card_number_norm"):
-        identity_part = str(matched_card["card_number_norm"])
+    elif matched_card.get("card_number") and matched_card.get("total_in_set"):
+        identity_part = f"{matched_card['card_number']}_{matched_card['total_in_set']}"
+    elif matched_card.get("card_number"):
+        identity_part = str(matched_card["card_number"])
     else:
         identity_part = "unresolved"
 
@@ -1045,17 +1045,17 @@ def normalize_charizard_key_from_parsed(parsed: ParsedTitle) -> str:
     if parsed.pokemon_name != "charizard":
         return "other_non_charizard"
 
-    set_part = parsed.set_guess or "unknown_set"
+    set_part = parsed.set_code or "unknown_set"
 
-    if parsed.promo_code_guess:
-        identity_part = parsed.promo_code_guess
+    if parsed.promo_code:
+        identity_part = parsed.promo_code
     elif parsed.card_fraction_norm:
         left, _, right = parsed.card_fraction_norm.partition("/")
         identity_part = f"{left}_{right}"
-    elif parsed.card_number_norm and parsed.card_total_guess:
-        identity_part = f"{parsed.card_number_norm}_{parsed.card_total_guess}"
-    elif parsed.card_number_norm:
-        identity_part = parsed.card_number_norm
+    elif parsed.card_number and parsed.card_total_guess:
+        identity_part = f"{parsed.card_number}_{parsed.card_total_guess}"
+    elif parsed.card_number:
+        identity_part = parsed.card_number
     else:
         identity_part = "unresolved"
 
@@ -1086,22 +1086,22 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
     if aspect_data.get("set_name"):
         detected_from_aspect = detect_set_from_text(normalize_text(aspect_data["set_name"]))
         if detected_from_aspect:
-            parsed.set_guess = detected_from_aspect
-        elif not parsed.set_guess:
-            parsed.set_guess = normalize_set_key(aspect_data["set_name"])
+            parsed.set_code = detected_from_aspect
+        elif not parsed.set_code:
+            parsed.set_code = normalize_set_key(aspect_data["set_name"])
 
     if aspect_data.get("card_number_raw"):
         raw, num, total, fraction = extract_fraction_fields(aspect_data["card_number_raw"])
         if raw:
             parsed.card_number_guess = raw
         if num:
-            parsed.card_number_norm = num
+            parsed.card_number = num
         if total:
             parsed.card_total_guess = total
         if fraction:
             parsed.card_fraction_norm = fraction
 
-    parsed.language_guess = extract_aspect_language(aspect_data.get("language"), parsed.language_guess or "en")
+    parsed.language = extract_aspect_language(aspect_data.get("language"), parsed.language or "en")
 
     if aspect_data.get("grade_company") and not parsed.grade_company:
         parsed.grade_company = str(aspect_data["grade_company"]).strip().upper()
@@ -1120,12 +1120,12 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
         parsed.is_junk = True
         parsed.junk_reason = parsed.junk_reason or "proxy_or_custom"
 
-    if not parsed.set_guess and aspect_data.get("set_name"):
-        parsed.set_guess = detect_set_from_text(normalize_text(aspect_data["set_name"])) or normalize_set_key(aspect_data["set_name"])
+    if not parsed.set_code and aspect_data.get("set_name"):
+        parsed.set_code = detect_set_from_text(normalize_text(aspect_data["set_name"])) or normalize_set_key(aspect_data["set_name"])
 
-    resolved_set = get_or_create_set(parsed.set_guess, aspect_data)
+    resolved_set = get_or_create_set(parsed.set_code, aspect_data)
     if resolved_set and resolved_set.get("set_key"):
-        parsed.set_guess = resolved_set["set_key"]
+        parsed.set_code = resolved_set["set_key"]
 
     # Match against the catalog FIRST, then derive the group key from the match
     # itself when one exists. This is what keeps grouping locked to the catalog's
@@ -1191,12 +1191,12 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
     listing_parse_row = {
         "parse_version": "v3_auto_set_resolution",
         "pokemon_name": parsed.pokemon_name,
-        "set_guess": parsed.set_guess,
+        "set_code": parsed.set_code,
         "card_number_guess": parsed.card_number_guess,
-        "card_number_norm": parsed.card_number_norm,
-        "promo_code_guess": parsed.promo_code_guess,
-        "variant_guess": parsed.variant_guess,
-        "language_guess": parsed.language_guess,
+        "card_number": parsed.card_number,
+        "promo_code": parsed.promo_code,
+        "variant": parsed.variant,
+        "language": parsed.language,
         "grade_company": parsed.grade_company,
         "grade_value": parsed.grade_value,
         "is_junk": parsed.is_junk,
@@ -1212,7 +1212,7 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
             "resolved_set_id": resolved_set["id"] if resolved_set else None,
             "resolved_set_name": resolved_set["set_name"] if resolved_set else None,
             "resolved_set_key": resolved_set["set_key"] if resolved_set else None,
-            "final_set_guess": parsed.set_guess,
+            "final_set_code": parsed.set_code,
         },
     }
 
@@ -1282,30 +1282,30 @@ def import_parsed_csv_to_listing_parses(csv_path: str) -> None:
             skipped_missing_listing += 1
             continue
 
-        set_guess = (row.get("set_slug") or row.get("set_name") or "").strip() or None
+        set_code = (row.get("set_slug") or row.get("set_name") or "").strip() or None
         card_number_guess = (row.get("card_number") or "").strip() or None
-        promo_code_guess = (row.get("promo_code") or "").strip() or None
-        variant_guess = (row.get("variant") or "").strip() or None
-        language_guess = (row.get("language") or "").strip() or None
+        promo_code = (row.get("promo_code") or "").strip() or None
+        variant = (row.get("variant") or "").strip() or None
+        language = (row.get("language") or "").strip() or None
         identity_status = (row.get("identity_status") or "").strip() or None
         identity_confidence_raw = (row.get("identity_confidence") or "").strip()
 
-        card_number_norm = None
+        card_number = None
         card_total_guess = None
         card_fraction_norm = None
 
         if card_number_guess:
             raw, num, total, fraction = extract_fraction_fields(card_number_guess)
             card_number_guess = raw or card_number_guess
-            card_number_norm = num
+            card_number = num
             card_total_guess = total
             card_fraction_norm = fraction
 
-            if not card_number_norm and not card_total_guess:
+            if not card_number and not card_total_guess:
                 compact = _split_compact_fraction_token(card_number_guess)
                 if compact:
-                    card_number_norm, card_total_guess = compact
-                    card_fraction_norm = f"{card_number_norm}/{card_total_guess}"
+                    card_number, card_total_guess = compact
+                    card_fraction_norm = f"{card_number}/{card_total_guess}"
 
         match_confidence = None
         if identity_confidence_raw:
@@ -1337,14 +1337,14 @@ def import_parsed_csv_to_listing_parses(csv_path: str) -> None:
                 "market_listing_id": market_listing_id,
                 "parse_version": "csv_import_v1",
                 "pokemon_name": (row.get("canonical_name") or "").strip().lower() or "charizard",
-                "set_guess": set_guess,
+                "set_code": set_code,
                 "card_number_guess": card_number_guess,
-                "card_number_norm": card_number_norm,
-                "promo_code_guess": promo_code_guess,
-                "variant_guess": variant_guess,
-                "language_guess": language_guess,
-                "grade_company": infer_grade_company_from_variant(variant_guess),
-                "grade_value": infer_grade_value_from_variant(variant_guess),
+                "card_number": card_number,
+                "promo_code": promo_code,
+                "variant": variant,
+                "language": language,
+                "grade_company": infer_grade_company_from_variant(variant),
+                "grade_value": infer_grade_value_from_variant(variant),
                 "is_junk": False,
                 "junk_reason": None,
                 "match_confidence": match_confidence,
