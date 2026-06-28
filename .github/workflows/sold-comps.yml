@@ -36,6 +36,7 @@ jobs:
           SOLDCOMPS_API_KEY: ${{ secrets.SOLDCOMPS_API_KEY }}
           SOLD_PROVIDER: soldcomps
           SOLD_BATCH_SIZE: "10"
+          SOLD_MIN_HOURS_BETWEEN_RUNS: "24"
         run: python sold_comp_collector.py
 
   normalizer:

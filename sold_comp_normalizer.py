@@ -98,17 +98,33 @@ def load_targets() -> Dict[str, dict]:
     return {row["query_text"]: row for row in rows if row.get("query_text")}
 
 
-
 def load_raw_rows(limit: int = SOLD_NORMALIZER_BATCH_SIZE) -> List[dict]:
+    """
+    Load only rows that haven't been normalized yet (normalized_at IS NULL).
+    Previously this fetched the oldest N rows unconditionally, causing the
+    same rows to be re-processed on every run. The normalized_at column and
+    index were added in migration add_normalized_at_to_sold_comps_raw.
+    """
     result = (
         supabase.table("sold_comps_raw")
-        .select("id,provider,provider_record_id,search_query,title,item_web_url,sold_at,sold_price_value,sold_price_currency,shipping_value,condition_text,listing_format,seller_name,quantity_sold,raw_json,ingested_at")
+        .select(
+            "id,provider,provider_record_id,search_query,title,item_web_url,"
+            "sold_at,sold_price_value,sold_price_currency,shipping_value,"
+            "condition_text,listing_format,seller_name,quantity_sold,raw_json,ingested_at"
+        )
+        .is_("normalized_at", "null")
         .order("ingested_at", desc=False)
         .limit(limit)
         .execute()
     )
     return result.data or []
 
+
+def stamp_normalized(raw_id: int) -> None:
+    """Mark a sold_comps_raw row as processed so it won't be re-normalized."""
+    supabase.table("sold_comps_raw").update(
+        {"normalized_at": utc_now()}
+    ).eq("id", raw_id).execute()
 
 
 def extract_target_identity(normalized_item_key: Optional[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -127,7 +143,6 @@ def extract_target_identity(normalized_item_key: Optional[str]) -> Tuple[Optiona
     return set_key, None, None
 
 
-
 def compute_total_price(sold_price, shipping_price):
     try:
         sold = float(sold_price) if sold_price is not None else None
@@ -141,6 +156,13 @@ def compute_total_price(sold_price, shipping_price):
         return None
     return sold + (shipping or 0.0)
 
+
+def has_strong_single_card_signal(parsed, title_norm: str) -> bool:
+    if parsed.card_fraction_norm or parsed.promo_code_guess:
+        return True
+    if parsed.grade_company and parsed.grade_value:
+        return True
+    return False
 
 
 def detect_exclusion(title_norm: str, parsed, target: Optional[dict]) -> Tuple[bool, Optional[str], str]:
@@ -180,7 +202,6 @@ def detect_exclusion(title_norm: str, parsed, target: Optional[dict]) -> Tuple[b
         return True, None, "B"
 
     return True, None, "A"
-
 
 
 def build_comp_row(raw_row: dict, target: Optional[dict]) -> dict:
@@ -234,7 +255,6 @@ def build_comp_row(raw_row: dict, target: Optional[dict]) -> dict:
     }
 
 
-
 def upsert_comp_row(row: dict) -> None:
     result = (
         supabase.table("sold_comps")
@@ -251,10 +271,16 @@ def upsert_comp_row(row: dict) -> None:
     supabase.table("sold_comps").upsert(row).execute()
 
 
-
 def main() -> None:
     targets = load_targets()
     raw_rows = load_raw_rows()
+
+    print({
+        "startup": True,
+        "batch_size": SOLD_NORMALIZER_BATCH_SIZE,
+        "raw_rows_to_process": len(raw_rows),
+    })
+
     processed = 0
     valid = 0
     excluded = 0
@@ -265,6 +291,8 @@ def main() -> None:
             target = targets.get(raw_row.get("search_query"))
             comp_row = build_comp_row(raw_row, target)
             upsert_comp_row(comp_row)
+            # Stamp the raw row as normalized so it won't be re-processed next run.
+            stamp_normalized(raw_row["id"])
             processed += 1
             if comp_row["is_valid_comp"]:
                 valid += 1
