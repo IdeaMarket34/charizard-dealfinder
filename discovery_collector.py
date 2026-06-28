@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -24,10 +24,31 @@ PAGE_SIZE = min(int(os.environ.get("DISCOVERY_PAGE_SIZE", "50")), 200)
 MAX_PAGES_PER_PLAN = int(os.environ.get("MAX_PAGES_PER_PLAN", "5"))
 SEARCH_PLAN_LIMIT = int(os.environ.get("SEARCH_PLAN_LIMIT", "50"))
 
+# Minimum seconds to sleep between successful eBay API calls.
+# This is the primary 429 prevention — keeps us well under the per-minute rate limit.
+# Increase if 429s persist; 0.5s = ~120 calls/min ceiling, 1.0s = ~60 calls/min.
+INTER_REQUEST_DELAY_S = float(os.environ.get("INTER_REQUEST_DELAY_S", "0.5"))
+
+# How many times to retry a single request after a 429 before giving up on the
+# current plan. Keeping this low (2) avoids spending the entire run window in
+# retry sleep loops when eBay is consistently rate-limiting.
+MAX_429_RETRIES = int(os.environ.get("MAX_429_RETRIES", "2"))
+
+# If a plan's last_success_at is within this many minutes, skip it this run.
+# Prevents back-to-back manual triggers from re-fetching identical data.
+# Set to 0 to disable (default off so existing behavior is unchanged).
+PLAN_COOLDOWN_MINUTES = int(os.environ.get("PLAN_COOLDOWN_MINUTES", "0"))
+
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 EBAY_ACCESS_TOKEN_CACHE: Optional[str] = None
 HTTP_SESSION = requests.Session()
+
+
+class RateLimitAbort(Exception):
+    """Raised when a plan should abort cleanly due to exhausted 429 retries.
+    Caught by process_plan; does NOT propagate to main so other plans can continue."""
+    pass
 
 
 def log(message: str) -> None:
@@ -159,8 +180,8 @@ def search_browse(
 
     last_error: Optional[str] = None
 
-    for attempt in range(1, 6):
-        log(f"Browse search attempt {attempt}: q={query_text!r} offset={offset} params={params}")
+    for attempt in range(1, MAX_429_RETRIES + 1):
+        log(f"Browse search attempt {attempt}/{MAX_429_RETRIES}: q={query_text!r} offset={offset}")
         response = HTTP_SESSION.get(
             "https://api.ebay.com/buy/browse/v1/item_summary/search",
             headers=get_headers(),
@@ -168,10 +189,16 @@ def search_browse(
             timeout=30,
         )
 
+        # Log rate-limit headers if present so we can track headroom
+        rl_remaining = response.headers.get("X-RateLimit-Remaining")
+        rl_limit = response.headers.get("X-RateLimit-Limit")
+        if rl_remaining is not None:
+            log(f"  eBay rate-limit: {rl_remaining}/{rl_limit} remaining")
+
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After")
-            wait_s = int(retry_after) if retry_after else min(2 ** attempt, 60)
-            last_error = f"429 rate limit; retrying in {wait_s}s"
+            wait_s = int(retry_after) if retry_after else min(2 ** attempt, 30)
+            last_error = f"429 rate limit (attempt {attempt}/{MAX_429_RETRIES}); waiting {wait_s}s"
             log(last_error)
             time.sleep(wait_s)
             continue
@@ -180,13 +207,20 @@ def search_browse(
             body_preview = response.text[:1000]
             raise RuntimeError(
                 f"Browse search failed ({response.status_code}) for query={query_text} "
-                f"offset={offset} params={params} response={body_preview}"
+                f"offset={offset} response={body_preview}"
             )
+
+        # Successful response — apply inter-request pacing before returning
+        if INTER_REQUEST_DELAY_S > 0:
+            time.sleep(INTER_REQUEST_DELAY_S)
 
         return response.json(), 1
 
-    raise RuntimeError(
-        f"search failed after retries for query={query_text} filters={filter_json} last_error={last_error}"
+    # All retries exhausted on 429 — abort this plan cleanly rather than raising a
+    # generic RuntimeError. process_plan will save partial results and move on.
+    raise RateLimitAbort(
+        f"429 retries exhausted for query={query_text} offset={offset}; "
+        f"aborting plan to preserve budget. last_error={last_error}"
     )
 
 
@@ -239,7 +273,6 @@ def queue_enrichment_jobs(source: str, listing_ids: List[str], reason: str = "ne
 
 
 def upsert_market_listing_summaries(source: str, items: List[dict]) -> None:
-    # De-duplicate by source_listing_id so ON CONFLICT does not hit the same key twice
     now_ts = utc_now()
     by_id: Dict[str, dict] = {}
 
@@ -268,7 +301,6 @@ def upsert_market_listing_summaries(source: str, items: List[dict]) -> None:
             "raw_payload": item,
         }
 
-        # Last one wins for that listing_id within this batch
         by_id[listing_id] = row
 
     rows = list(by_id.values())
@@ -281,6 +313,21 @@ def upsert_market_listing_summaries(source: str, items: List[dict]) -> None:
         ).execute()
 
 
+def plan_is_on_cooldown(plan: dict) -> bool:
+    """Return True if this plan ran successfully too recently and should be skipped."""
+    if PLAN_COOLDOWN_MINUTES <= 0:
+        return False
+    last_success = plan.get("last_success_at")
+    if not last_success:
+        return False
+    try:
+        last_dt = datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+        age_minutes = (datetime.now(timezone.utc) - last_dt).total_seconds() / 60
+        return age_minutes < PLAN_COOLDOWN_MINUTES
+    except Exception:
+        return False
+
+
 def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]:
     search_run_id = create_search_run(plan)
     api_calls_used = 0
@@ -290,21 +337,30 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]
     all_summary_events: List[dict] = []
     all_items: List[dict] = []
     queued_listing_ids: List[str] = []
+    rate_limited = False
 
     try:
-        log(f"Processing plan {plan['id']} query={plan['query_text']!r} filter_json={plan.get('filter_json') or {}}")
+        log(f"Processing plan {plan['id']} query={plan['query_text']!r}")
 
         for page_index in range(MAX_PAGES_PER_PLAN):
             if api_calls_used >= remaining_budget:
+                log(f"Budget exhausted mid-plan {plan['id']}; saving partial results.")
                 break
 
             offset = page_index * PAGE_SIZE
-            payload, calls_used = search_browse(
-                query_text=plan["query_text"],
-                filter_json=plan.get("filter_json") or {},
-                offset=offset,
-                limit=PAGE_SIZE,
-            )
+
+            try:
+                payload, calls_used = search_browse(
+                    query_text=plan["query_text"],
+                    filter_json=plan.get("filter_json") or {},
+                    offset=offset,
+                    limit=PAGE_SIZE,
+                )
+            except RateLimitAbort as e:
+                log(f"Rate limit abort on plan {plan['id']} page {page_index}: {e}")
+                rate_limited = True
+                break  # Save whatever we collected so far; don't propagate
+
             api_calls_used += calls_used
 
             items = payload.get("itemSummaries") or []
@@ -348,6 +404,7 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]
             if len(items) < PAGE_SIZE:
                 break
 
+        # Persist whatever we collected, even if rate-limited mid-run
         if all_summary_events:
             insert_raw_events(all_summary_events)
 
@@ -360,11 +417,13 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]
             else 0
         )
 
+        final_status = "rate_limited_partial" if rate_limited else "completed"
+
         if search_run_id:
             finalize_search_run(
                 search_run_id,
                 {
-                    "status": "completed",
+                    "status": final_status,
                     "api_calls_used": api_calls_used,
                     "result_count": total_results,
                     "unique_item_count": unique_count,
@@ -373,9 +432,11 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]
                 },
             )
 
-        mark_search_plan_run(plan["id"], total_results)
+        if not rate_limited:
+            mark_search_plan_run(plan["id"], total_results)
+
         log(
-            f"Completed plan {plan['id']}: calls={api_calls_used} "
+            f"Plan {plan['id']} {final_status}: calls={api_calls_used} "
             f"results={total_results} unique={unique_count} queued={queued_count}"
         )
         return api_calls_used, total_results, unique_count, queued_count
@@ -399,7 +460,13 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int]
 
 
 def main() -> None:
-    log("Starting discovery collector...")
+    log(
+        f"Starting discovery collector | "
+        f"inter_request_delay={INTER_REQUEST_DELAY_S}s "
+        f"max_429_retries={MAX_429_RETRIES} "
+        f"plan_cooldown={PLAN_COOLDOWN_MINUTES}min "
+        f"budget={MAX_SEARCH_CALLS_PER_RUN}"
+    )
     plans = load_active_search_plans()
     log(f"Loaded {len(plans)} active plans")
 
@@ -408,11 +475,18 @@ def main() -> None:
     total_results = 0
     total_unique = 0
     total_queued = 0
+    plans_skipped = 0
 
     for plan in plans:
         if remaining_budget <= 0:
             log("Search budget exhausted.")
             break
+
+        if plan_is_on_cooldown(plan):
+            last_success = plan.get("last_success_at", "unknown")
+            log(f"Skipping plan {plan['id']} (cooldown: last success {last_success})")
+            plans_skipped += 1
+            continue
 
         calls_used, result_count, unique_count, queued_count = process_plan(plan, remaining_budget)
         remaining_budget -= calls_used
@@ -424,7 +498,8 @@ def main() -> None:
     log(
         json.dumps(
             {
-                "plans_processed": len(plans),
+                "plans_processed": len(plans) - plans_skipped,
+                "plans_skipped_cooldown": plans_skipped,
                 "api_calls_used": total_calls,
                 "results_seen": total_results,
                 "unique_or_changed": total_unique,

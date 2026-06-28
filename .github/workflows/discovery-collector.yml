@@ -8,7 +8,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -19,6 +19,16 @@ jobs:
       SEARCH_PLAN_LIMIT: 50
       MAX_PAGES_PER_PLAN: 5
       DISCOVERY_PAGE_SIZE: 50
+      # Minimum seconds between eBay API calls — primary 429 prevention.
+      # 0.5s caps throughput at ~120 calls/min, well under eBay's rate limit.
+      INTER_REQUEST_DELAY_S: "0.5"
+      # Max retries per request on 429 before aborting the current plan cleanly.
+      # Keeping this low prevents retry loops from consuming the entire run window.
+      MAX_429_RETRIES: "2"
+      # Skip plans whose last_success_at is within this many minutes.
+      # Set to 50 to prevent back-to-back manual triggers from double-burning quota.
+      # Set to 0 to disable (processes all active plans every run).
+      PLAN_COOLDOWN_MINUTES: "50"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
