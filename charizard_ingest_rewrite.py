@@ -85,6 +85,8 @@ JUNK_PATTERNS = [
     r"\bsleeve[s]?\b",
     r"\bplaymat\b",
     r"\bpoker playing card\b",
+    r"\bchoose your\b",   # multi-card lot listings ("choose your card/exact card/mini set")
+    r"\bfanart\b",        # non-TCG fan-made cards
 ]
 
 KNOWN_SET_NAME_PATTERNS = [
@@ -127,10 +129,14 @@ KNOWN_SET_NAME_PATTERNS = [
     "darkness ablaze",
     "celebrations",
     "classic collection",   # Celebrations: Classic Collection subset → cel
+    "lost origin",
     "pokemon mew",          # "Pokemon MEW EN" alt title for Scarlet & Violet 151
     "mew en",               # same
     "rocket 1st edition",   # EN Team Rocket set titles often omit "team"
     "pokemon rocket",       # same — "2000 Pokemon Rocket #4 Dark Charizard"
+    "dark charizard",       # uniquely EN Team Rocket; no other EN set has this card
+    "pokemon unlimited",    # "1999 Pokemon Unlimited #4/102" → Base Set
+    "obf",                  # Obsidian Flames abbreviation used in graded-card titles
     # English Mega Evolution era sets
     "phantasmal flames",
     "ascended heroes",
@@ -187,10 +193,14 @@ SET_NAME_NORMALIZATIONS = {
     "darkness ablaze": "daa",
     "celebrations": "cel",
     "classic collection": "cel",    # Celebrations: Classic Collection subset; card #4 lives in cel
+    "lost origin": "lor",
     "pokemon mew": "151",           # "Pokemon MEW EN" → Scarlet & Violet 151
     "mew en": "151",                # same
     "rocket 1st edition": "tr",     # EN Team Rocket; "team" often omitted in titles
     "pokemon rocket": "tr",         # same
+    "dark charizard": "tr",         # uniquely EN Team Rocket — no other EN set has this card
+    "pokemon unlimited": "bs",      # "1999 Pokemon Unlimited #4/102" → Base Set
+    "obf": "obsidianflames",        # Obsidian Flames abbreviation
     # English Mega Evolution era sets
     "phantasmal flames": "pfl",
     "ascended heroes": "asc",
