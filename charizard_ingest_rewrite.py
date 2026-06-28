@@ -29,6 +29,37 @@ FRACTION_RE = re.compile(r"\b([a-z]{0,3}\d{1,4})\s*/\s*([a-z]{0,3}\d{1,4})\b", r
 GRADE_RE = re.compile(r"\b(psa|bgs|cgc|sgc)\s*(\d{1,2}(?:\.\d)?)\b", re.I)
 SET_CODE_RE = re.compile(r"\b(sv\d{1,3}|svp|swsh\d*|swsh|sm\d*|sm|xy\d*|xy|bw\d+|bw|dp|pl|neo\d|base|ecard)\b", re.I)
 
+# Bare/standalone card-number signals, used as a fallback when there's no
+# "/total" fraction in the title (e.g. promo cards). These are intentionally
+# anchored to explicit cues (#, a grade-style alpha+digit code, or proximity
+# to "ex"/"promo") rather than scanning the whole title for any digit run,
+# which previously caused years and listing-id prefixes to be misread as
+# card numbers (session #11).
+HASH_NUMBER_RE = re.compile(r"#\s*([a-z]{0,3}\d{1,4})\b", re.I)
+ALPHA_CARD_CODE_RE = re.compile(r"\b([a-z]{2,3}\d{1,4})\b", re.I)
+GRADE_PREFIX_WORDS = {"psa", "bgs", "cgc", "sgc"}
+
+# Alpha prefixes that appear in eBay listing titles but are NOT card-number
+# prefixes in the Pokemon TCG catalog (confirmed against pokemon_cards table).
+# Blocking these prevents extract_bare_card_number() from returning garbage.
+#   HP  = hit point value ("HP500 Charizard")
+#   NT  = Japanese card-condition label (Near-Top)
+#   NO  = "No.006" card-name convention, not a card number
+#   SI  = slab/cert identifier suffix
+#   SS  = non-TCG set code
+#   EX  = ambiguous / not in catalog as prefix (EX era cards use plain numbers)
+#   C   = non-TCG / fanart label
+#   E   = Topps/non-TCG
+#   CSV = Chinese set identifier, not a card number
+#   SMP = Japanese promo set code (no Charizard cards in catalog with this prefix)
+BLOCKED_ALPHA_PREFIXES = {
+    "hp", "nt", "no", "si", "ss", "ex", "c", "e", "csv", "smp",
+}
+NEAR_VARIANT_NUMBER_RE = re.compile(r"\b(?:ex|gx|v|vmax|vstar)\s+(\d{2,3})\b", re.I)
+NEAR_PROMO_CONTEXT_NUMBER_RE = re.compile(
+    r"\b(\d{2,3})\b\s+(?:mega evolution|black star|promo)", re.I
+)
+
 JUNK_PATTERNS = [
     r"\bproxy\b",
     r"\bcustom\b",
@@ -232,12 +263,30 @@ def _normalize_card_part(part: str) -> str:
     return f"{prefix}{number}" if prefix else number
 
 
+def _looks_like_year(token: str) -> bool:
+    digits = re.sub(r"\D", "", token or "")
+    if not digits:
+        return False
+    try:
+        n = int(digits)
+    except ValueError:
+        return False
+    return 1996 <= n <= 2035
+
+
 def _split_compact_fraction_token(token: str) -> Optional[Tuple[str, str]]:
     token = (token or "").strip()
     if not token.isdigit():
         return None
 
     if len(token) < 3 or len(token) > 6:
+        return None
+
+    # A 4-digit token in the modern TCG era range is almost always a year
+    # (e.g. "2025"), not a numerator/total pair. Splitting it produced
+    # false matches like "2025" -> "20"/"25" when the real card number
+    # (e.g. "#023") appeared later in the title. See session #11 writeup.
+    if len(token) == 4 and _looks_like_year(token):
         return None
 
     candidates = []
@@ -287,6 +336,44 @@ def extract_fraction_fields(value: Optional[str]) -> Tuple[Optional[str], Option
     return cleaned, None, None, None
 
 
+def extract_bare_card_number(t: str) -> Optional[str]:
+    """Fallback card-number extraction for titles with no '/total' fraction.
+
+    Anchored to explicit cues so it can't grab an unrelated number (a year,
+    a listing-id prefix, a PSA/CGC grade) the way the old blanket
+    "any 3-6 digit run in the title" fallback did.
+    """
+    if not t:
+        return None
+
+    m = HASH_NUMBER_RE.search(t)
+    if m and not _looks_like_year(m.group(1)):
+        return _normalize_card_part(m.group(1))
+
+    for m in ALPHA_CARD_CODE_RE.finditer(t):
+        token = m.group(1)
+        prefix_match = re.match(r"^[a-z]+", token, re.I)
+        if prefix_match:
+            prefix_lower = prefix_match.group(0).lower()
+            if prefix_lower in GRADE_PREFIX_WORDS:
+                continue
+            if prefix_lower in BLOCKED_ALPHA_PREFIXES:
+                continue
+        if _looks_like_year(token):
+            continue
+        return _normalize_card_part(token)
+
+    m = NEAR_VARIANT_NUMBER_RE.search(t)
+    if m and not _looks_like_year(m.group(1)):
+        return _normalize_card_part(m.group(1))
+
+    m = NEAR_PROMO_CONTEXT_NUMBER_RE.search(t)
+    if m and not _looks_like_year(m.group(1)):
+        return _normalize_card_part(m.group(1))
+
+    return None
+
+
 def detect_junk(t: str) -> Tuple[bool, Optional[str]]:
     for pat in JUNK_PATTERNS:
         if re.search(pat, t):
@@ -304,6 +391,7 @@ def extract_promo_code(t: str) -> Optional[str]:
         r"\b(sm)\s*[-#:]?\s*(\d{1,3})\b",
         r"\b(xy)\s*[-#:]?\s*(\d{1,3})\b",
         r"\b(bw)\s*[-#:]?\s*(\d{1,3})\b",
+        r"\b(dp)\s*[-#:]?\s*(\d{1,3})\b",
     ]
 
     for pattern in promo_patterns:
@@ -321,6 +409,16 @@ def extract_grade(t: str) -> Tuple[Optional[str], Optional[float]]:
     return m.group(1).upper(), float(m.group(2))
 
 
+ERA_FULL_NAME_TO_PROMO_SET = [
+    (r"sun\s*&?\s*moon|sun and moon", "prsm"),
+    (r"sword\s*&?\s*shield|sword and shield", "prsw"),
+    (r"diamond\s*&?\s*pearl|diamond and pearl", "prdpp"),
+    (r"black\s*&?\s*white|black and white", "prblw"),
+    (r"scarlet\s*&?\s*violet|scarlet and violet", "prsv"),
+    (r"\bxy\b|x\s*&?\s*y\b", "prxy"),
+]
+
+
 def detect_set_from_text(t: str) -> Optional[str]:
     if not t:
         return None
@@ -336,7 +434,33 @@ def detect_set_from_text(t: str) -> Optional[str]:
         if promo.startswith("xy"):
             return "prxy"
         if promo.startswith("bw"):
-            return "prbw"
+            # Catalog's populated BW promo row uses set_key "prblw"
+            # (93 reference cards); "prbw" is an empty/orphaned duplicate.
+            return "prblw"
+        if promo.startswith("dp"):
+            # Catalog's populated DP promo row uses set_key "prdpp"
+            # (51 reference cards).
+            return "prdpp"
+
+    # Promo titles often spell the era out ("Sun & Moon Black Star Promo",
+    # "Diamond & Pearl Black Star Promo") rather than using the literal
+    # abbreviation extract_promo_code looks for. Check those explicitly so
+    # an older era doesn't fall through to the modern-era default below.
+    if re.search(r"\bpromo", t):
+        for pattern, set_key in ERA_FULL_NAME_TO_PROMO_SET:
+            if re.search(pattern, t):
+                return set_key
+
+        if re.search(r"\bblack star promos?\b", t):
+            return "prsv"
+
+    # Modern Scarlet & Violet / Mega Evolution Black Star Promos are often
+    # written with no era marker, and "MEP" (Mega Evolution Promo) titles
+    # sometimes skip the literal word "promo" entirely ("MEP EN #023"). They
+    # already have 161 reference cards under set_key "prsv" - resolve there
+    # directly rather than auto-creating a new (likely duplicate) set.
+    if re.search(r"\bmega evolution\b", t) or re.search(r"\bmep\b", t):
+        return "prsv"
 
     for pattern in sorted(KNOWN_SET_NAME_PATTERNS, key=len, reverse=True):
         if pattern in t:
@@ -391,7 +515,28 @@ def has_strong_single_card_signal(parsed, title_norm: str) -> bool:
 def parse_listing_title(title: str) -> ParsedTitle:
     t = normalize_text(title)
     is_junk, junk_reason = detect_junk(t)
-    card_raw, card_norm, card_total, card_fraction = extract_fraction_fields(t)
+
+    # Only trust a real "/total" fraction here. The old code ran the
+    # generic title text through extract_fraction_fields()'s compact-blob
+    # fallback too, which scans the *entire* title for any 3-6 digit run -
+    # that's what was grabbing years ("2025"->"20"/"25") and inventing fake
+    # totals for standalone promo numbers ("030"->"0"/"30"). Bare/promo-style
+    # numbers are handled by the cue-anchored extract_bare_card_number()
+    # fallback below instead.
+    fraction_match = FRACTION_RE.search(t)
+    if fraction_match:
+        raw_left, raw_right = fraction_match.group(1), fraction_match.group(2)
+        card_norm = _normalize_card_part(raw_left)
+        card_total = _normalize_card_part(raw_right)
+        card_raw = f"{raw_left}/{raw_right}"
+        card_fraction = f"{card_norm}/{card_total}"
+    else:
+        card_raw = card_norm = card_total = card_fraction = None
+        bare = extract_bare_card_number(t)
+        if bare:
+            card_raw = bare
+            card_norm = bare
+
     grade_company, grade_value = extract_grade(t)
     return ParsedTitle(
         raw_title=title,
