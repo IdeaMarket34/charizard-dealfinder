@@ -12,7 +12,7 @@ load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
-PARSER_BATCH_SIZE = int(os.environ.get("PARSER_BATCH_SIZE", "50"))
+PARSER_BATCH_SIZE = int(os.environ.get("PARSER_BATCH_SIZE", "200"))
 BASE_DIR = Path(__file__).resolve().parent
 CHARIZARD_REWRITE_PATH = BASE_DIR / "charizard_ingest_rewrite.py"
 
@@ -44,6 +44,7 @@ def load_detail_events(limit: int = PARSER_BATCH_SIZE) -> List[dict]:
         supabase.table("raw_market_events")
         .select("id,source,source_listing_id,payload_json,observed_at")
         .eq("event_type", "detail")
+        .is_("parsed_at", "null")
         .order("observed_at", desc=False)
         .limit(limit)
         .execute()
@@ -206,6 +207,12 @@ def mark_jobs_done(source_listing_id: str) -> None:
     }).eq("source", "ebay").eq("source_listing_id", source_listing_id).eq("job_type", "detail_fetch").execute()
 
 
+def mark_event_parsed(event_id: str) -> None:
+    supabase.table("raw_market_events").update(
+        {"parsed_at": utc_now()}
+    ).eq("id", event_id).execute()
+
+
 def process_event(row: dict) -> Tuple[bool, str]:
     payload = row["payload_json"] or {}
     item = payload
@@ -222,6 +229,7 @@ def process_event(row: dict) -> Tuple[bool, str]:
     replace_listing_images(market_listing_id, row["source_listing_id"], bundle)
     # maybe_insert_sold_comp(bundle)
     mark_jobs_done(row["source_listing_id"])
+    mark_event_parsed(row["id"])
     return True, row["source_listing_id"]
 
 
