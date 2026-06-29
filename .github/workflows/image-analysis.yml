@@ -30,6 +30,6 @@ jobs:
       - name: Run image analysis worker
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           IMAGE_BATCH_SIZE: ${{ github.event.inputs.batch_size || '150' }}
         run: python image_analysis_worker.py
