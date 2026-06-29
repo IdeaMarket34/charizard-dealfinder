@@ -19,7 +19,7 @@ EBAY_CLIENT_ID = os.environ["EBAY_CLIENT_ID"]
 EBAY_CLIENT_SECRET = os.environ["EBAY_CLIENT_SECRET"]
 EBAY_MARKETPLACE_ID = os.environ.get("EBAY_MARKETPLACE_ID", "EBAY_US")
 
-MAX_SEARCH_CALLS_PER_RUN = int(os.environ.get("MAX_SEARCH_CALLS_PER_RUN", "250"))
+MAX_SEARCH_CALLS_PER_RUN = int(os.environ.get("MAX_SEARCH_CALLS_PER_RUN", "120"))
 PAGE_SIZE = min(int(os.environ.get("DISCOVERY_PAGE_SIZE", "200")), 200)
 MAX_PAGES_PER_PLAN = int(os.environ.get("MAX_PAGES_PER_PLAN", "5"))
 SEARCH_PLAN_LIMIT = int(os.environ.get("SEARCH_PLAN_LIMIT", "50"))
