@@ -854,6 +854,17 @@ def infer_set_insert_payload(set_code: str, aspect_data: Optional[Dict[str, Opti
         "release_date": None,
         "aliases": ",".join(aliases),
         "needs_review": needs_review,
+        # session #34 fix: this was never set on auto-created sets at all,
+        # leaving the auto_created flag silently false/unset on every row the
+        # parser ever spawned (confirmed live: only 3 of 437 pokemon_sets
+        # rows had it true, and those were the ones manually inserted via
+        # direct SQL this session). Without it, there was no reliable way to
+        # distinguish a real catalog-imported set from a parser-spawned
+        # fragment after the fact — the orphan audit in this session had to
+        # fall back to a created_at/card-population heuristic instead. Now
+        # any set this function creates is correctly flagged, so future
+        # cleanup passes can just query on it directly.
+        "auto_created": True,
     }
 
 
