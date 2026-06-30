@@ -113,6 +113,14 @@ JUNK_PATTERNS = [
     r"\btin\b",
     r"\bgold plated\b",   # novelty/non-genuine cards, not real TCG cards
     r"\bmystery grab\b",   # mystery-grab/grab-bag listings, not a specific card
+    # Non-Pokemon-TCG collectible lines that share Pokemon branding but are a
+    # different product entirely (session #39 finding — these were slipping
+    # through as real Charizard TCG matches): Topps' licensed Pokemon trading
+    # cards, 1990s Bandai Carddass vending-machine cards, and novelty
+    # "Pokedex card" products.
+    r"\btopps\b",
+    r"\bcarddass\b",
+    r"\bpokedex card\b",
 ]
 
 KNOWN_SET_NAME_PATTERNS = [
