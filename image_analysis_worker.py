@@ -92,9 +92,15 @@ def fetch_reference_phashes() -> list[dict]:
     filesystem — see reference_phashes table comment / sync_reference_phashes.py).
     """
     resp = supabase.table("reference_phashes").select(
-        "pokemon_card_id, card_key, phash"
+        "pokemon_card_id, card_key, phash, pokemon_cards(card_number)"
     ).execute()
-    return resp.data or []
+    rows = resp.data or []
+    # Flatten the joined pokemon_cards.card_number onto each row so downstream
+    # code (find_best_phash_match) can treat this like any other flat field.
+    for row in rows:
+        joined = row.pop("pokemon_cards", None) or {}
+        row["card_number"] = joined.get("card_number")
+    return rows
 
 
 # ── Image download ────────────────────────────────────────────────────────────
@@ -145,6 +151,7 @@ def find_best_phash_match(phash_hex: str, reference_library: list[dict]) -> dict
     return {
         "pokemon_card_id": best["pokemon_card_id"],
         "card_key": best["card_key"],
+        "card_number": best.get("card_number"),
         "distance": best_distance,
     }
 
@@ -250,6 +257,23 @@ def card_number_verdict(ocr_num: str | None, parse_num: str | None) -> str:
     return "confirm" if normalize_card_number(ocr_num) == normalize_card_number(parse_num) else "conflict"
 
 
+def phash_card_number_verdict(ref_card_num: str | None, parse_num: str | None) -> str:
+    """
+    Compare a phash match's reference card_number to the parser's card_number.
+    Returns 'confirm', 'conflict', or 'not_found'.
+
+    This is the session #31 reprint/identical-artwork mitigation: phash alone
+    cannot distinguish cards with identical artwork printed across different
+    sets/numbers (e.g. daa|20 vs shf|SV107). A two-signal agreement (phash +
+    parser both landing on the same card_number) is much stronger evidence
+    than phash distance alone — and a disagreement is a strong signal the
+    phash match is wrong, even at a low hamming distance.
+    """
+    if not ref_card_num or not parse_num:
+        return "not_found"
+    return "confirm" if normalize_card_number(ref_card_num) == normalize_card_number(parse_num) else "conflict"
+
+
 # ── Row processing ────────────────────────────────────────────────────────────
 
 def process_row(row: dict, reference_library: list[dict]) -> dict:
@@ -304,11 +328,15 @@ def process_row(row: dict, reference_library: list[dict]) -> dict:
         match = find_best_phash_match(phash_hex, reference_library)
         if match is not None:
             tier = phash_match_tier(match["distance"])
+            agreement = phash_card_number_verdict(match.get("card_number"), row.get("card_number"))
             analysis["phash_match"] = {
                 "pokemon_card_id": match["pokemon_card_id"],
                 "card_key": match["card_key"],
                 "distance": match["distance"],
                 "tier": tier,
+                "card_number_agreement": agreement,
+                "reference_card_number": match.get("card_number"),
+                "parser_card_number": row.get("card_number"),
             }
 
     return analysis
@@ -326,8 +354,17 @@ def write_result(parse_id: int, market_listing_id: int, analysis: dict) -> None:
         phash is corroborating evidence here, not an override authority yet).
         Always inserts/updates a row in listing_card_matches regardless, so
         the match is recorded even when it didn't win the matched_card_id slot.
+        EXCEPTION: if the phash match's card_number conflicts with the
+        parser's card_number (card_number_agreement == "conflict"), the match
+        is demoted to candidate instead — this is the session #31
+        reprint/identical-artwork mitigation (priority #2). A low phash
+        distance is not enough on its own when an independent signal
+        actively disagrees; auto_accept should only fire when nothing
+        contradicts it.
       - candidate tier → queued in parse_review_queue for manual review,
-        does not touch matched_card_id.
+        does not touch matched_card_id. The reviewer note flags a
+        card_number conflict explicitly when present, since that's the
+        strongest signal for the reprint-collision failure mode.
       - no_match → nothing written beyond the image_analysis jsonb itself.
     """
     update: dict = {"image_analysis": analysis}  # pass dict; Supabase client serializes to jsonb
@@ -340,12 +377,17 @@ def write_result(parse_id: int, market_listing_id: int, analysis: dict) -> None:
     if phash_match:
         tier = phash_match["tier"]
         distance = phash_match["distance"]
+        agreement = phash_match.get("card_number_agreement", "not_found")
+        # Demote auto_accept -> candidate on card_number conflict. See
+        # docstring above — this never *promotes* a candidate, it only ever
+        # makes the outcome more conservative.
+        effective_tier = "candidate" if (tier == "auto_accept" and agreement == "conflict") else tier
         # Confidence is a simple linear mapping from hamming distance over a
         # 64-bit hash — a starting heuristic, not a calibrated probability.
         # Revisit once we have real-world distance distributions to tune against.
         confidence = round(max(0.0, 1 - (distance / 64)), 4)
 
-        if tier in ("auto_accept", "candidate"):
+        if effective_tier in ("auto_accept", "candidate"):
             existing_match = (
                 supabase.table("listing_card_matches")
                 .select("id, match_method")
@@ -366,10 +408,12 @@ def write_result(parse_id: int, market_listing_id: int, analysis: dict) -> None:
                         "distance": distance,
                         "card_key": phash_match["card_key"],
                         "tier": tier,
+                        "effective_tier": effective_tier,
+                        "card_number_agreement": agreement,
                     },
                 }).execute()
 
-        if tier == "auto_accept":
+        if effective_tier == "auto_accept":
             # Only fill the gap — never overwrite an existing match.
             update["matched_card_id"] = phash_match["pokemon_card_id"]
             update["match_confidence"] = confidence
@@ -377,14 +421,26 @@ def write_result(parse_id: int, market_listing_id: int, analysis: dict) -> None:
             if current.data and current.data[0]["matched_card_id"] is not None:
                 update.pop("matched_card_id", None)
                 update.pop("match_confidence", None)
-        elif tier == "candidate":
+        elif effective_tier == "candidate":
+            note = (
+                f"phash candidate match: card_id={phash_match['pokemon_card_id']} "
+                f"({phash_match['card_key']}), distance={distance}"
+            )
+            if tier == "auto_accept" and agreement == "conflict":
+                note = (
+                    f"phash {tier} match DEMOTED to candidate due to card_number "
+                    f"conflict: card_id={phash_match['pokemon_card_id']} "
+                    f"({phash_match['card_key']}), distance={distance}, "
+                    f"reference card_number={phash_match.get('reference_card_number')!r} "
+                    f"vs parser card_number={phash_match.get('parser_card_number')!r} "
+                    f"(likely reprint/identical-artwork collision)"
+                )
+            elif agreement == "conflict":
+                note += " — NOTE: card_number conflict with parser (possible reprint/identical-artwork collision)"
             supabase.table("parse_review_queue").upsert({
                 "listing_parse_id": parse_id,
                 "review_status": "pending",
-                "reviewer_note": (
-                    f"phash candidate match: card_id={phash_match['pokemon_card_id']} "
-                    f"({phash_match['card_key']}), distance={distance}"
-                ),
+                "reviewer_note": note,
             }, on_conflict="listing_parse_id").execute()
 
     supabase.table("listing_parses").update(update).eq("id", parse_id).execute()
