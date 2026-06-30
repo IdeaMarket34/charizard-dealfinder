@@ -33,9 +33,20 @@ GRADE_RE = re.compile(r"\b(psa|bgs|cgc|sgc)\s*(\d{1,2}(?:\.\d)?)\b", re.I)
 # m\d[a-z]? covers m2 (Inferno X) and m2a (Mega Dream ex).
 # cll/clk are the 2023 JP Classic deck codes.
 SET_CODE_RE = re.compile(
-    r"\b(sv\d{1,2}[a-z]?|svp|m\d[a-z]?|s\d{1,2}[a-z]?|cll|clk"
+    r"\b(sv\d{1,2}[a-z]?|svp|m\d[a-z]?|sm\d{1,2}[a-z]?|s\d{1,2}[a-z]?|cll|clk"
     r"|swsh\d*|swsh|sm\d*|sm|xy\d*|xy|bw\d+|bw|dp|pl|neo\d|base|ecard"
-    r"|pfl|asc|cp6)\b",
+    r"|pfl|asc|cp6"
+    # Chinese-market deck/set codes — "cs5aC", "cs2aC" (Sword & Shield era)
+    # and "csm1aC", "csm2cC" (Sun & Moon era). These were not matched at all
+    # previously; every one fell through to fuzzy set_name matching and
+    # fragmented into duplicate auto-created sets per title variant
+    # (session #33 finding — e.g. sm12a_tag_team_gx_tag_all_stars /
+    # tag_team_gx / tag_all_stars all turned out to be the same set).
+    r"|csm\d{1,2}[a-z]?c|cs\d{1,2}[a-z]?c"
+    # Bare numeric+C Chinese promo codes, e.g. "151C". Deliberately narrow
+    # (exactly 2-3 digits + literal C) to avoid colliding with other tokens.
+    r"|\d{2,3}c(?=\b)"
+    r")\b",
     re.I
 )
 
@@ -811,14 +822,38 @@ def infer_set_insert_payload(set_code: str, aspect_data: Optional[Dict[str, Opti
     _jp_key_re = re.compile(r'^(sv\d|s\d|m\d|cll|clk)', re.I)
     language = "ja" if _jp_key_re.match(set_key) else "en"
 
+    # session #34 fix: this previously hardcoded set_code=None on every
+    # auto-created set, which guaranteed the set_code-column lookup added to
+    # get_or_create_set() could never match it on a later ingest — the next
+    # listing with a slightly different title phrasing for the *same* real
+    # set would fail every match path and spawn a brand new duplicate row
+    # instead of reusing this one. Populate it whenever SET_CODE_RE (or an
+    # override) actually identified a real code; only fall back to None when
+    # the set was created purely from fuzzy aspect_data.set_name text with no
+    # extractable code at all, since in that case there's nothing reliable to
+    # write there.
+    detected_code = set_code if SET_CODE_RE.fullmatch((set_code or "").strip()) else None
+    inferred_set_code = (override.get("set_key").upper() if override else None) or (
+        detected_code.upper() if detected_code else None
+    )
+
+    # If we're falling back to raw, unstructured set_name text (no clean
+    # code, no override match), flag the new row for human review instead of
+    # letting it silently join the catalog as an unverified auto-created
+    # fragment. needs_review rows can be queried and reconciled in bulk
+    # rather than discovered only when someone manually audits a null-set
+    # backlog (session #33).
+    needs_review = inferred_set_code is None and override is None
+
     return {
         "set_key": set_key,
         "set_name": set_name,
         "series_name": None,
-        "set_code": None,
+        "set_code": inferred_set_code,
         "language": language,
         "release_date": None,
         "aliases": ",".join(aliases),
+        "needs_review": needs_review,
     }
 
 
@@ -834,6 +869,26 @@ def get_or_create_set(set_code: Optional[str], aspect_data: Optional[Dict[str, O
     readable_candidates = []
     if aspect_data.get("set_name"):
         readable_candidates.append(aspect_data["set_name"].strip())
+
+    # session #34 fix: check the set_code column directly first. This is the
+    # highest-confidence match path and the one that was missing entirely —
+    # previously every lookup went through set_key/alias text matching only,
+    # so even when a listing's title contained an exact, unambiguous code
+    # (e.g. "sm11a", "CSM2cC"), it wouldn't match an existing set unless that
+    # exact string happened to already be baked into the set_key slug or an
+    # alias. Combined with infer_set_insert_payload() now actually writing
+    # set_code on creation, this closes the loop: the second listing for a
+    # given code reuses the first one's row instead of spawning a duplicate.
+    if set_code:
+        result = (
+            supabase.table("pokemon_sets")
+            .select("id,set_key,set_name,aliases")
+            .ilike("set_code", set_code.strip())
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
 
     for candidate in normalized_candidates:
         result = (
