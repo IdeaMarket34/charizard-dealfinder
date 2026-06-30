@@ -157,7 +157,9 @@ KNOWN_SET_NAME_PATTERNS = [
     "ascended heroes",
     # Japanese set names — modern high-value sets
     "shiny treasure ex",
+    "shiny treasure",        # wording-variant near-miss: title omits "ex" — session #28
     "ruler of the black flame",
+    "ruler of black flame",  # wording-variant near-miss: title omits "the" — session #28
     "vstar universe",
     "shiny star v",
     "inferno x",
@@ -222,7 +224,9 @@ SET_NAME_NORMALIZATIONS = {
     "ascended heroes": "asc",
     # Japanese set names → their canonical JP set_keys
     "shiny treasure ex": "sv4a",
+    "shiny treasure": "sv4a",            # wording-variant — session #28
     "ruler of the black flame": "sv3",
+    "ruler of black flame": "sv3",       # wording-variant — session #28
     "vstar universe": "s12a",
     "shiny star v": "s4a",
     "inferno x": "m2",
