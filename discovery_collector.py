@@ -366,6 +366,19 @@ def seller_passes_filter(item: dict) -> bool:
     return int(score) >= MIN_SELLER_FEEDBACK_SCORE
 
 
+def has_fixed_price(item: dict) -> bool:
+    """Return True if the listing has a Buy It Now / fixed price option.
+
+    Auction-only listings (buyingOptions == ["AUCTION"]) have no real price —
+    only a current bid, which is misleading for median price calculations
+    and useless for direct comparison. We only ingest listings that include
+    FIXED_PRICE (BIN) as a buying option, which includes straight fixed-price
+    listings as well as auctions with a Buy It Now price attached.
+    """
+    buying_options = item.get("buyingOptions") or []
+    return "FIXED_PRICE" in buying_options
+
+
 def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int, int]:
     search_run_id = create_search_run(plan)
     api_calls_used = 0
@@ -373,6 +386,7 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int,
     unique_count = 0
     duplicate_count = 0
     filtered_count = 0
+    auction_filtered_count = 0
     all_summary_events: List[dict] = []
     all_items: List[dict] = []
     queued_listing_ids: List[str] = []
@@ -406,6 +420,18 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int,
             if not items:
                 log(f"No items returned for plan {plan['id']} at offset {offset}")
                 break
+
+            # Drop auction-only listings (no Buy It Now price) before any
+            # other processing — current bid price is not a usable price.
+            pre_auction_filter = len(items)
+            items = [item for item in items if has_fixed_price(item)]
+            page_auction_filtered = pre_auction_filter - len(items)
+            if page_auction_filtered:
+                log(
+                    f"  Auction filter: dropped {page_auction_filtered}/{pre_auction_filter} "
+                    f"auction-only items (page {page_index})"
+                )
+            auction_filtered_count += page_auction_filtered
 
             # Drop listings from low-feedback / brand-new sellers before any
             # processing — they never reach raw_market_events or market_listings.
@@ -480,6 +506,7 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int,
                     "unique_item_count": unique_count,
                     "duplicate_item_count": duplicate_count,
                     "filtered_seller_count": filtered_count,
+                    "filtered_auction_count": auction_filtered_count,
                     "error_count": 0,
                 },
             )
@@ -490,9 +517,10 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int,
         log(
             f"Plan {plan['id']} {final_status}: calls={api_calls_used} "
             f"results={total_results} unique={unique_count} "
-            f"filtered_sellers={filtered_count} queued={queued_count}"
+            f"filtered_sellers={filtered_count} filtered_auctions={auction_filtered_count} "
+            f"queued={queued_count}"
         )
-        return api_calls_used, total_results, unique_count, queued_count, filtered_count
+        return api_calls_used, total_results, unique_count, queued_count, filtered_count, auction_filtered_count
 
     except Exception as e:
         log(f"Plan failed {plan['id']}: {e}")
@@ -509,7 +537,7 @@ def process_plan(plan: dict, remaining_budget: int) -> Tuple[int, int, int, int,
                     "error_message": str(e),
                 },
             )
-        return api_calls_used, total_results, unique_count, 0, 0
+        return api_calls_used, total_results, unique_count, 0, 0, 0
 
 
 def main() -> None:
@@ -529,6 +557,7 @@ def main() -> None:
     total_unique = 0
     total_queued = 0
     total_filtered = 0
+    total_auction_filtered = 0
     plans_skipped = 0
 
     for plan in plans:
@@ -542,13 +571,14 @@ def main() -> None:
             plans_skipped += 1
             continue
 
-        calls_used, result_count, unique_count, queued_count, filtered_count = process_plan(plan, remaining_budget)
+        calls_used, result_count, unique_count, queued_count, filtered_count, auction_filtered_count = process_plan(plan, remaining_budget)
         remaining_budget -= calls_used
         total_calls += calls_used
         total_results += result_count
         total_unique += unique_count
         total_queued += queued_count
         total_filtered += filtered_count
+        total_auction_filtered += auction_filtered_count
 
     log(
         json.dumps(
@@ -559,6 +589,7 @@ def main() -> None:
                 "results_seen": total_results,
                 "unique_or_changed": total_unique,
                 "seller_filtered": total_filtered,
+                "auction_filtered": total_auction_filtered,
                 "detail_jobs_queued": total_queued,
                 "remaining_budget": remaining_budget,
             }
