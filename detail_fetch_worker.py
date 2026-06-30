@@ -43,6 +43,22 @@ class WorkerRateLimitError(Exception):
         self.message = message
 
 
+class ItemNotFoundError(Exception):
+    """Raised when eBay returns 404 for an item — almost always means the
+    listing sold/ended and was delisted. The qty==0 check in
+    build_market_listing_patch only catches multi-quantity listings going
+    out of stock; a single-card listing (the common case here) disappears
+    from the API entirely once it sells, so 404 is the real "sold" signal.
+    Previously this fell through to the generic >=400 handler and was
+    treated as a worker failure — the job eventually went to status=failed
+    after exhausting retries, but market_listings.listing_status was never
+    updated, so sold listings stayed "active" forever (session #39 finding).
+    """
+    def __init__(self, source_listing_id: str) -> None:
+        super().__init__(f"item_not_found:{source_listing_id}")
+        self.source_listing_id = source_listing_id
+
+
 def log(message: str) -> None:
     print(message, flush=True)
 
@@ -200,6 +216,9 @@ def fetch_item_detail(access_token: str, source_listing_id: str) -> Dict[str, An
             delay = min(delay * 2, 60)
             continue
 
+        if response.status_code == 404:
+            raise ItemNotFoundError(source_listing_id)
+
         if response.status_code >= 400:
             body = response.text[:1000] if response.text else ""
             raise RuntimeError(f"http_{response.status_code}: {body}")
@@ -298,6 +317,23 @@ def update_market_listing(source: str, source_listing_id: str, patch: Dict[str, 
         supabase.table("market_listings").insert(row).execute()
 
 
+def mark_listing_ended(source: str, source_listing_id: str) -> None:
+    now = utc_now_iso()
+    (
+        supabase.table("market_listings")
+        .update(
+            {
+                "listing_status": "ended",
+                "last_detail_refresh_at": now,
+                "last_seen_at": now,
+            }
+        )
+        .eq("source", source)
+        .eq("source_listing_id", source_listing_id)
+        .execute()
+    )
+
+
 def mark_job_succeeded(job_id: str) -> None:
     (
         supabase.table("enrichment_jobs")
@@ -388,7 +424,16 @@ def process_job(access_token: str, job: Dict[str, Any]) -> Tuple[bool, str]:
     if source != "ebay":
         return False, f"unsupported_source:{source}"
 
-    detail = fetch_item_detail(access_token, source_listing_id)
+    try:
+        detail = fetch_item_detail(access_token, source_listing_id)
+    except ItemNotFoundError:
+        # 404 from eBay's item endpoint means the listing is gone — almost
+        # always because it sold. Mark it ended rather than failing the job,
+        # since this is a normal/expected lifecycle outcome, not an error.
+        mark_listing_ended(source, source_listing_id)
+        mark_job_succeeded(job["id"])
+        return True, f"{source_listing_id}:marked_ended_404"
+
     upsert_raw_market_event(source, source_listing_id, detail)
     patch = build_market_listing_patch(detail)
     update_market_listing(source, source_listing_id, patch)
