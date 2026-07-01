@@ -325,12 +325,32 @@ def build_market_listing_patch(detail: Dict[str, Any]) -> Dict[str, Any]:
     condition = detail.get("condition")
 
     listing_status = "active"
+
+    # qty==0 catches multi-quantity listings going out of stock.
     estimated_availability = detail.get("estimatedAvailabilities") or []
     if estimated_availability:
         est = estimated_availability[0]
         qty = est.get("estimatedAvailableQuantity")
         if qty == 0:
             listing_status = "ended"
+
+    # itemEndDate catches the case where eBay returns a 200 (not a 404) for a
+    # listing that has already ended — typically a GTC listing that sold
+    # recently and hasn't been fully deindexed from the API yet. The 404 path
+    # in fetch_item_detail handles the more common case (listing fully gone),
+    # but during the lag window eBay can still return a valid item response
+    # with itemEndDate set to a past timestamp. Without this check we'd
+    # overwrite listing_status back to "active" on every detail refresh.
+    # Mirrors the is_listing_not_ended() guard in discovery_collector.py
+    # (session #60), closing the same gap on the detail-fetch side.
+    item_end_date_str = detail.get("itemEndDate")
+    if item_end_date_str:
+        try:
+            item_end_date = datetime.fromisoformat(item_end_date_str.replace("Z", "+00:00"))
+            if item_end_date <= datetime.now(timezone.utc):
+                listing_status = "ended"
+        except (ValueError, TypeError):
+            pass
 
     patch = {
         "raw_title": detail.get("title"),
