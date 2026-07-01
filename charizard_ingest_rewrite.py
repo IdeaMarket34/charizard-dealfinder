@@ -27,6 +27,25 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 PROMO_RE = re.compile(r"\b(?:swsh|svp|sm|xy|bw)\s*[-#]?\s*(\d{1,4})\b", re.I)
 FRACTION_RE = re.compile(r"\b([a-z]{0,3}\d{1,4})\s*/\s*([a-z]{0,3}\d{1,4})\b", re.I)
 GRADE_RE = re.compile(r"\b(psa|bgs|cgc|sgc)\s*(\d{1,2}(?:\.\d)?)\b", re.I)
+
+# Raw card condition keywords found in listing titles.
+# Longer/more-specific phrases first so they match before short abbreviations.
+# HP uses a negative lookahead to avoid matching the Pokémon hit-point notation
+# "HP 330" (HP immediately followed by digits = hit points, not condition).
+RAW_CONDITION_RE = re.compile(
+    r"\b("
+    r"near[\s\-]?mint"
+    r"|lightly[\s\-]?played"
+    r"|moderately[\s\-]?played"
+    r"|heavily[\s\-]?played"
+    r"|nm"
+    r"|lp"
+    r"|mp"
+    r"|hp(?!\s*\d)"
+    r")\b",
+    re.I,
+)
+
 # Matches EN and JP set codes found in listing titles.
 # JP codes: sv\d{1,2}[a-z] covers sv4a, sv1a, sv3a etc. (the old sv\d{1,3} only matched sv3 not sv4a).
 # s\d{1,2}[a-z]? covers s4a, s9, s12a (Sword & Shield era JP sets).
@@ -331,6 +350,7 @@ class ParsedTitle:
     variant: Optional[str]
     is_junk: bool
     junk_reason: Optional[str]
+    raw_condition: Optional[str]
 
 
 def normalize_text(title: str) -> str:
@@ -543,6 +563,26 @@ def extract_grade(t: str) -> Tuple[Optional[str], Optional[float]]:
     return m.group(1).upper(), float(m.group(2))
 
 
+def parse_raw_condition(t: str) -> Optional[str]:
+    """Extract raw card condition (NM/LP/MP/HP) from a normalized title.
+    Only meaningful for ungraded listings; call only when grade_company is None.
+    HP is excluded when followed by digits (Pokémon hit points, e.g. 'HP 330').
+    """
+    m = RAW_CONDITION_RE.search(t)
+    if not m:
+        return None
+    raw = m.group(1).lower()
+    if raw.startswith("near") or raw == "nm":
+        return "NM"
+    if raw.startswith("lightly") or raw == "lp":
+        return "LP"
+    if raw.startswith("moderately") or raw == "mp":
+        return "MP"
+    if raw.startswith("heavily") or raw == "hp":
+        return "HP"
+    return None
+
+
 ERA_FULL_NAME_TO_PROMO_SET = [
     (r"sun\s*&?\s*moon|sun and moon", "prsm"),
     (r"sword\s*&?\s*shield|sword and shield", "prsw"),
@@ -737,6 +777,7 @@ def parse_listing_title(title: str) -> ParsedTitle:
             card_norm = bare
 
     grade_company, grade_value = extract_grade(t)
+    raw_condition = parse_raw_condition(t) if grade_company is None else None
 
     # Strip stamp/deck/box/shortened-set qualifier phrases before checking
     # for a genuine Charizard mention — see CHARIZARD_QUALIFIER_RE_LIST above.
@@ -773,6 +814,7 @@ def parse_listing_title(title: str) -> ParsedTitle:
         variant=extract_variant(t),
         is_junk=is_junk,
         junk_reason=junk_reason,
+        raw_condition=raw_condition,
     )
 
 
@@ -787,6 +829,7 @@ def extract_aspects(detail: dict) -> Dict[str, Optional[str]]:
         "rarity": None,
         "grade_company": None,
         "grade_value": None,
+        "raw_condition": None,
         "is_jumbo": False,
         "is_oversize": False,
         "is_proxy": False,
@@ -819,6 +862,9 @@ def extract_aspects(detail: dict) -> Dict[str, Optional[str]]:
             grade_match = re.search(r"\b(\d{1,2}(?:\.\d)?)\b", value)
             if grade_match:
                 result["grade_value"] = float(grade_match.group(1))
+            # For ungraded listings, "card condition" may say "Near Mint or Better" etc.
+            if result["grade_value"] is None and not result["grade_company"]:
+                result["raw_condition"] = parse_raw_condition(normalize_text(value))
 
         if "jumbo" in value_norm:
             result["is_jumbo"] = True
@@ -1399,6 +1445,11 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
         parsed.is_junk = True
         parsed.junk_reason = parsed.junk_reason or "proxy_or_custom"
 
+    # Use aspect-sourced raw_condition as fallback if title parsing didn't yield one.
+    # Only applies to ungraded listings (grade_company is None after all aspect merges).
+    if parsed.raw_condition is None and aspect_data.get("raw_condition") and parsed.grade_company is None:
+        parsed.raw_condition = aspect_data["raw_condition"]
+
     if not parsed.set_code and aspect_data.get("set_name"):
         parsed.set_code = detect_set_from_text(normalize_text(aspect_data["set_name"])) or normalize_set_key(aspect_data["set_name"])
 
@@ -1478,6 +1529,7 @@ def map_item_to_bundle(item: dict, detail: Optional[dict] = None) -> dict:
         "language": parsed.language,
         "grade_company": parsed.grade_company,
         "grade_value": parsed.grade_value,
+        "raw_condition": parsed.raw_condition,
         "is_junk": parsed.is_junk,
         "junk_reason": parsed.junk_reason,
         "match_confidence": 0.97 if matched_card else None,
