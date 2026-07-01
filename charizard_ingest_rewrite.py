@@ -50,7 +50,7 @@ RAW_CONDITION_RE = re.compile(
     r"|nm"
     r"|lp"
     r"|mp"
-    r"|hp(?!\s*\d)"
+    r"|hp(?![\s/:\-]*\d)"
     r")\b",
     re.I,
 )
@@ -578,28 +578,35 @@ def parse_raw_condition(t: str) -> Optional[str]:
     Returns lowercase: 'nm', 'lp', 'mp', or 'hp'.
     HP is the lowest tier — damage/dmg map here too (no separate 'poor' bucket).
     Only meaningful for ungraded listings; call only when grade_company is None.
-    HP abbreviation is excluded when followed by digits (Pokémon hit points,
-    e.g. 'HP 330' on card text) via the negative lookahead in RAW_CONDITION_RE.
+
+    Uses finditer so that a rejected HP hit-point token doesn't shadow a valid
+    condition token later in the same title — e.g. "330 HP NM" should return
+    'nm', not None. (#22)
+
+    Two guards prevent the bare "hp" abbreviation from matching Pokémon hit-point
+    notation:
+      - RAW_CONDITION_RE lookahead: blocks "HP 330", "HP/330", "HP:330", "HP-330"
+        (HP followed by optional separators then a digit).
+      - Code guard below: blocks "330 HP", "250 HP" (digit immediately before HP,
+        the reversed hit-point format).
     """
-    m = RAW_CONDITION_RE.search(t)
-    if not m:
-        return None
-    raw = m.group(1).lower()
-    if raw.startswith("near") or raw.startswith("nr") or raw.startswith("mint") or raw == "nm":
-        return "nm"
-    if raw.startswith("lightly") or raw.startswith("light") or raw == "lp":
-        return "lp"
-    if raw.startswith("moderately") or raw.startswith("moderate") or raw == "mp":
-        return "mp"
-    if (raw.startswith("heavily") or raw.startswith("heavy")
-            or raw.startswith("damage") or raw == "dmg" or raw == "hp"):
-        # Extra guard for the bare "HP" abbreviation: reject when the match is
-        # preceded by digits (e.g. "330 HP", "250 HP" = card hit points printed
-        # on the card face). The regex lookahead already blocks "HP 330" (digit
-        # after); this covers the reverse order.
-        if raw == "hp" and re.search(r"(?<!\w)\d{2,3}\s*$", t[: m.start()]):
-            return None
-        return "hp"
+    for m in RAW_CONDITION_RE.finditer(t):
+        raw = m.group(1).lower()
+        if raw.startswith("near") or raw.startswith("nr") or raw.startswith("mint") or raw == "nm":
+            return "nm"
+        if raw.startswith("lightly") or raw.startswith("light") or raw == "lp":
+            return "lp"
+        if raw.startswith("moderately") or raw.startswith("moderate") or raw == "mp":
+            return "mp"
+        if (raw.startswith("heavily") or raw.startswith("heavy")
+                or raw.startswith("damage") or raw == "dmg" or raw == "hp"):
+            # Extra guard for the bare "HP" abbreviation: reject when preceded by
+            # digits (e.g. "330 HP" = hit points). The regex lookahead already
+            # handles digits after HP. Use continue, not return None, so the loop
+            # can still find a valid condition token later in the title.
+            if raw == "hp" and re.search(r"(?<!\w)\d{2,3}\s*$", t[: m.start()]):
+                continue
+            return "hp"
     return None
 
 
