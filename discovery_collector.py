@@ -222,6 +222,10 @@ def search_browse(
         "q": query_text,
         "limit": limit,
         "offset": offset,
+        # Default to newlyListed so every run surfaces fresh listings first and
+        # avoids wasting pages on stale GTC listings that dominate relevance sort.
+        # Individual plans can override via filter_json["sort"] if ever needed.
+        "sort": filter_json.get("sort", "newlyListed"),
     }
 
     filter_param = build_filter_param(filter_json)
