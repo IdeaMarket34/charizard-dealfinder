@@ -1,0 +1,3205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Charizard Dealfinder — Operator Console</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --text-xs: clamp(0.7rem, 0.65rem + 0.25vw, 0.8rem);
+      --text-sm: clamp(0.8rem, 0.75rem + 0.25vw, 0.875rem);
+      --text-base: clamp(0.875rem, 0.85rem + 0.15vw, 1rem);
+      --text-lg: clamp(1rem, 0.9rem + 0.5vw, 1.25rem);
+      --text-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.625rem);
+      --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+      --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem;
+      --radius-sm: 2px; --radius-md: 3px; --radius-lg: 4px; --radius-xl: 5px; --radius-full: 9999px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.3); --shadow-md: 0 8px 28px rgba(0,0,0,.45);
+      --font-body: 'Satoshi', system-ui, sans-serif;
+      --col-grid: 72px minmax(240px,288px) 220px 1fr 80px 96px 104px 104px;
+    }
+    [data-theme="dark"] {
+      --color-bg: #0c0e11;
+      --color-surface: #111418;
+      --color-surface-2: #171b21;
+      --color-surface-offset: #1d2128;
+      --color-border: #252932;
+      --color-border-strong: #343a46;
+      --color-text: #c8ced8;
+      --color-text-muted: #68737f;
+      --color-text-faint: #3c4252;
+      --color-text-inverse: #0c0e11;
+      --color-primary: #27b5a8;
+      --color-primary-hover: #32cfc1;
+      --color-primary-highlight: rgba(39,181,168,.13);
+      --color-success: #4cb87a;
+      --color-success-soft: rgba(76,184,122,.14);
+      --color-green-lite: #7bc47a;
+      --color-green-lite-soft: rgba(123,196,122,.14);
+      --color-yellow: #c8a84e;
+      --color-yellow-soft: rgba(200,168,78,.14);
+      --color-red: #d06060;
+      --color-red-soft: rgba(208,96,96,.14);
+      --color-white-soft: rgba(255,255,255,.04);
+      --color-blue: #5b9bd5;
+    }
+    [data-theme="light"] {
+      --color-bg: #f0f2f5;
+      --color-surface: #fafbfc;
+      --color-surface-2: #eef0f3;
+      --color-surface-offset: #e4e7ec;
+      --color-border: #d0d5de;
+      --color-border-strong: #b8bfcc;
+      --color-text: #1a1f2e;
+      --color-text-muted: #5a6272;
+      --color-text-faint: #9aa0b0;
+      --color-text-inverse: #fafbfc;
+      --color-primary: #1a9a8e;
+      --color-primary-hover: #12877c;
+      --color-primary-highlight: rgba(26,154,142,.12);
+      --color-success: #2e9656;
+      --color-success-soft: rgba(46,150,86,.12);
+      --color-green-lite: #3f8f3f;
+      --color-green-lite-soft: rgba(63,143,63,.12);
+      --color-yellow: #9a7c28;
+      --color-yellow-soft: rgba(154,124,40,.12);
+      --color-red: #b03030;
+      --color-red-soft: rgba(176,48,48,.12);
+      --color-white-soft: rgba(0,0,0,.05);
+      --color-blue: #2a6aaa;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { font-family: var(--font-body); font-size: var(--text-base); background: var(--color-bg); color: var(--color-text); }
+    button, input { font: inherit; color: inherit; }
+
+    /* ── App Shell ── */
+    .app { display: grid; grid-template-rows: auto auto auto 1fr auto; height: 100dvh; }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(12,14,17,.95); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--color-border);
+      padding: var(--space-3) var(--space-4);
+    }
+    .brand-row {
+      display: flex; align-items: center; gap: var(--space-3);
+      justify-content: space-between; margin-bottom: var(--space-3);
+    }
+    .brand { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+    .brand svg { width: 24px; height: 24px; color: var(--color-primary); flex-shrink: 0; }
+    .brand-copy h1 {
+      font-size: var(--text-sm); line-height: 1.1; margin: 0;
+      letter-spacing: .08em; text-transform: uppercase; font-weight: 700;
+      color: var(--color-text);
+    }
+    .brand-copy p { margin: 0; font-size: var(--text-xs); color: var(--color-text-faint); }
+    .theme-btn {
+      min-width: 32px; min-height: 32px; display: grid; place-items: center;
+      border: 1px solid var(--color-border); background: var(--color-surface);
+      border-radius: var(--radius-md); padding: 0; cursor: pointer;
+    }
+    .theme-btn:hover { border-color: var(--color-border-strong); }
+    .search-row { display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-2); }
+    .search-shell {
+      display: flex; align-items: center; gap: var(--space-3);
+      background: var(--color-surface-2); border: 1px solid var(--color-border);
+      border-radius: var(--radius-md); padding: 0 var(--space-3);
+      min-height: 36px; transition: border-color .15s;
+    }
+    .search-shell:focus-within { border-color: var(--color-primary); }
+    .search-shell input { flex: 1; background: transparent; border: 0; outline: 0; min-width: 0; font-size: var(--text-sm); }
+    .search-btn, .ghost-btn, .buy-btn {
+      min-height: 36px; border-radius: var(--radius-md); border: 1px solid var(--color-border);
+      padding: 0 var(--space-4); font-size: var(--text-sm); font-weight: 700; cursor: pointer;
+      white-space: nowrap;
+    }
+    .search-btn { background: var(--color-primary); color: white; border-color: transparent; }
+    .search-btn:hover { background: var(--color-primary-hover); }
+    .ghost-btn { background: var(--color-surface-2); }
+    .ghost-btn:hover { border-color: var(--color-border-strong); }
+    .buy-btn { background: var(--color-primary); color: white; border-color: transparent; }
+
+    /* ── Toolbar / Stats ── */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-3); padding: var(--space-2) var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface-2); min-height: 36px;
+    }
+    .stats { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); align-items: center; }
+    .chip {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: var(--color-surface-offset); border: 1px solid var(--color-border);
+      padding: .2rem .5rem; border-radius: var(--radius-sm);
+      font-size: var(--text-xs); color: var(--color-text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    /* ── Condition filter ── */
+    .cond-bar { display: flex; flex-direction: column; gap: 3px; }
+    .cond-sub-bar { display: flex; flex-wrap: wrap; gap: 3px; padding-left: var(--space-3); margin-top: 3px; }
+    .cond-chip {
+      display: inline-flex; align-items: center;
+      padding: 3px var(--space-2); border-radius: var(--radius-sm);
+      border: 1px solid var(--color-border); background: transparent;
+      color: var(--color-text-muted); font-size: var(--text-xs); cursor: pointer;
+      font-family: var(--font-body); white-space: nowrap;
+      transition: border-color .12s, color .12s, background .12s; text-align: left;
+    }
+    .cond-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+    .cond-chip.active { background: var(--color-primary-highlight); border-color: var(--color-primary); color: var(--color-primary); font-weight: 600; }
+    .cond-chip-type { width: 100%; }
+    .cond-loading { font-size: var(--text-xs); color: var(--color-text-faint); padding: 2px 0; }
+    .content { overflow: hidden; display: grid; grid-template-columns: auto minmax(0,1fr) 320px; }
+    .results-pane { overflow-y: auto; padding: 0 var(--space-4) 5rem; }
+    .detail-pane {
+      border-left: 1px solid var(--color-border); background: var(--color-surface);
+      overflow: hidden; padding: 0;
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Table Head ── */
+    .table-head {
+      display: grid; grid-template-columns: var(--col-grid);
+      gap: var(--space-3); align-items: center;
+      padding: var(--space-2) var(--space-4);
+      font-size: var(--text-xs); color: var(--color-text-faint);
+      text-transform: uppercase; letter-spacing: .07em;
+      position: sticky; top: 0; z-index: 10;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      margin: 0 calc(-1 * var(--space-4));
+      padding-left: calc(var(--space-4) + var(--space-4));
+      padding-right: calc(var(--space-4) + var(--space-4));
+    }
+    /* Push Seller / Price / vs Market past the spacer col (col 4 = 1fr) */
+    .table-head > *:nth-child(4),
+    .group-summary > *:nth-child(4),
+    .row > *:nth-child(3) { grid-column: 5; }
+    .table-head > *:nth-child(5),
+    .group-summary > *:nth-child(5),
+    .row > *:nth-child(4) { grid-column: 6; }
+    .table-head > *:nth-child(6),
+    .group-summary > *:nth-child(6),
+    .row > *:nth-child(5) { grid-column: 7; }
+    .table-head > *:nth-child(7),
+    .group-summary > *:nth-child(7),
+    .row > *:nth-child(6) { grid-column: 8; }
+
+    .sort-btn {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: transparent; border: 0; padding: 0; cursor: pointer;
+      color: inherit; font-size: inherit; text-transform: inherit;
+      letter-spacing: inherit; white-space: nowrap;
+    }
+    .sort-btn:hover { color: var(--color-text-muted); }
+    .sort-btn.active { color: var(--color-primary); }
+
+    /* ── Groups ── */
+    .group {
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      overflow: hidden; margin-bottom: var(--space-2);
+      transition: border-color .12s;
+    }
+    .group:hover { border-color: var(--color-border-strong); }
+    .group.expanded {
+      border-left: 2px solid var(--color-primary);
+      border-color: var(--color-border-strong);
+    }
+    .group-summary {
+      width: 100%; text-align: left;
+      padding: var(--space-2) var(--space-4);
+      display: grid; grid-template-columns: var(--col-grid);
+      gap: var(--space-3); align-items: center;
+      background: transparent; border: 0; cursor: pointer;
+    }
+    .group-summary:hover { background: var(--color-white-soft); }
+    .caret {
+      width: 22px; height: 22px; display: grid; place-items: center;
+      border-radius: var(--radius-sm); background: var(--color-surface-offset);
+      color: var(--color-text-faint); font-size: .6rem;
+    }
+    .group.expanded .caret { color: var(--color-primary); background: var(--color-primary-highlight); }
+    .group-title { min-width: 0; grid-column: 2 / 5; }
+    .group-title strong {
+      display: block; font-size: var(--text-sm); white-space: nowrap;
+      font-weight: 700;
+    }
+    .subtle { font-size: var(--text-xs); color: var(--color-text-muted); }
+    .metric { text-align: right; }
+    .metric strong { display: block; font-size: var(--text-sm); font-variant-numeric: tabular-nums lining-nums; }
+    .rows { display: none; border-top: 1px solid var(--color-border); }
+    .group.expanded .rows { display: block; }
+
+    /* ── Listing Rows ── */
+    .row {
+      display: grid; grid-template-columns: var(--col-grid);
+      gap: var(--space-3); align-items: center;
+      padding: var(--space-2) var(--space-4);
+      border-top: 1px solid var(--color-border);
+      cursor: pointer; transition: background .1s;
+    }
+    .row:first-child { border-top: 0; }
+    .row:hover { background: var(--color-white-soft); }
+    .row.selected {
+      background: var(--color-primary-highlight);
+      border-left: 2px solid var(--color-primary);
+      padding-left: calc(var(--space-4) - 2px);
+    }
+    .thumb {
+      width: 60px; height: 60px; border-radius: var(--radius-md);
+      border: 1px solid var(--color-border); overflow: hidden;
+      background: var(--color-surface-offset);
+      display: grid; place-items: center; color: var(--color-text-faint);
+      cursor: pointer; padding: 0; flex-shrink: 0;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb:hover { border-color: var(--color-primary); }
+    .title-cell { min-width: 0; }
+    .title-cell strong {
+      display: block; font-size: var(--text-sm); white-space: normal;
+      overflow: visible; word-break: break-word; font-weight: 500;
+    }
+    .title-cell .subtle { display: block; margin-top: .15rem; }
+    .num, .price { font-variant-numeric: tabular-nums lining-nums; }
+    .id-cell { font-size: var(--text-xs); color: var(--color-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .date-cell { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+    .seller-cell { font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .price-cell { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums lining-nums; text-align: right; }
+    .median-cell { text-align: right; }
+
+    /* ── Pct Pills ── */
+    .pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 58px; padding: .3rem .5rem; border-radius: var(--radius-sm);
+      font-size: var(--text-xs); font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .pct-green  { background: var(--color-success-soft);    color: var(--color-success); }
+    .pct-lite   { background: var(--color-green-lite-soft); color: var(--color-green-lite); }
+    .pct-white  { background: var(--color-white-soft);      color: var(--color-text); }
+    .pct-yellow { background: var(--color-yellow-soft);     color: var(--color-yellow); }
+    .pct-red    { background: var(--color-red-soft);        color: var(--color-red); }
+    .metric-estimated { opacity: .68; }
+    .metric-estimated strong { font-style: italic; }
+    .pill-estimated { border: 1px dashed currentColor; opacity: .72; }
+
+    /* ── Detail Pane (Inspection Console) ── */
+    .side-card {
+      border-bottom: 1px solid var(--color-border);
+      padding: var(--space-2) var(--space-3);
+    }
+    .side-card h2 {
+      margin: 0 0 var(--space-2);
+      font-size: var(--text-xs); font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--color-text-faint);
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      column-gap: var(--space-3);
+      row-gap: 2px;
+      font-size: var(--text-xs);
+    }
+    .kv dt {
+      color: var(--color-text-faint);
+      white-space: nowrap;
+      padding: .1rem 0;
+    }
+    .kv dd {
+      margin: 0; color: var(--color-text);
+      overflow-wrap: anywhere; word-break: break-word;
+      padding: .1rem 0;
+    }
+
+    /* ── Selection / Action Bar ── */
+    .selection-bar {
+      position: sticky; bottom: 0; z-index: 25;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-4); padding: var(--space-3) var(--space-4);
+      background: rgba(12,14,17,.97); backdrop-filter: blur(12px);
+      border-top: 1px solid var(--color-border);
+    }
+    .selection-meta strong { display: block; font-size: var(--text-sm); font-weight: 600; }
+    .selection-meta span  { display: block; font-size: var(--text-xs); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Detail pane inline image viewer ── */
+    .detail-image-stage {
+      width: 100%; background: var(--color-surface-offset);
+      border-radius: var(--radius-md); overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 80px; margin-bottom: var(--space-2);
+      cursor: zoom-in;
+    }
+    .detail-image-stage img {
+      max-width: 100%; max-height: 130px;
+      object-fit: contain; display: block;
+    }
+    .detail-image-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .detail-image-nav { display: flex; gap: var(--space-1); }
+    .detail-image-nav .icon-btn {
+      width: 28px; height: 28px; font-size: .7rem;
+    }
+    .detail-image-nav .icon-btn:disabled {
+      opacity: .3; cursor: default;
+    }
+
+    /* ── Modal ── */
+    .modal {
+      position: fixed; inset: 0; display: none; place-items: center;
+      background: rgba(0,0,0,.82); z-index: 60; padding: var(--space-5);
+    }
+    .modal.open { display: grid; }
+    .modal-card {
+      width: min(960px,100%); background: var(--color-surface);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-lg); overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .modal-stage { background: #080a0c; display: grid; place-items: center; padding: var(--space-3); }
+    .modal-stage img { max-width: 100%; max-height: 82vh; width: auto; height: auto; object-fit: contain; }
+    .modal-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-4); padding: var(--space-3) var(--space-4);
+      border-top: 1px solid var(--color-border);
+    }
+    .modal-nav { display: flex; gap: var(--space-2); }
+    .icon-btn {
+      min-width: 36px; min-height: 36px; display: grid; place-items: center;
+      border: 1px solid var(--color-border); background: var(--color-surface-2);
+      border-radius: var(--radius-md); cursor: pointer;
+    }
+    .icon-btn:hover { border-color: var(--color-border-strong); }
+
+    /* ── Misc ── */
+    .empty {
+      padding: var(--space-8); text-align: center; color: var(--color-text-muted);
+      border: 1px dashed var(--color-border); border-radius: var(--radius-md);
+      margin-top: var(--space-4);
+    }
+    .mobile-only { display: none; }
+    .sr-only { position: absolute; left: -9999px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1100px) {
+      .content { grid-template-columns: 1fr; }
+      .filter-sidebar { display: none; }
+      .detail-pane { display: none; }
+    }
+    @media (max-width: 760px) {
+      html, body { overflow: auto; }
+      .app { height: auto; min-height: 100dvh; grid-template-rows: auto auto auto 1fr auto; }
+      .search-row { grid-template-columns: 1fr; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .results-pane { padding: var(--space-3) var(--space-3) 5rem; }
+      .table-head { display: none; }
+      .group-summary, .row {
+        grid-template-columns: 56px 1fr;
+      }
+      .metric, .row > :not(:nth-child(1)):not(:nth-child(2)) { text-align: left; }
+      .group-summary .metric, .group-summary .subtle-block { display: none; }
+      .row { gap: var(--space-2) var(--space-3); }
+      .row .id-cell, .row .date-cell, .row .seller-cell, .row .price-cell, .row .median-cell { grid-column: 2; }
+      .thumb { width: 52px; height: 52px; }
+      .selection-bar { flex-direction: column; align-items: stretch; }
+      .mobile-only { display: block; }
+    }
+    /* ── Filter Sidebar ── */
+    .filter-sidebar {
+      width: 210px; border-right: 1px solid var(--color-border);
+      background: var(--color-surface); overflow-y: auto; overflow-x: hidden;
+      display: flex; flex-direction: column; flex-shrink: 0;
+      transition: width .15s ease;
+    }
+    .filter-sidebar.collapsed { width: 28px; overflow: hidden; }
+    .filter-rail {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 var(--space-2); border-bottom: 1px solid var(--color-border);
+      height: 36px; flex-shrink: 0; position: sticky; top: 0;
+      background: var(--color-surface); z-index: 5;
+    }
+    .filter-sidebar.collapsed .filter-rail { justify-content: center; }
+    .filter-clear-all-btn {
+      background: transparent; border: 0; cursor: pointer; font-family: var(--font-body);
+      color: var(--color-text-faint); font-size: var(--text-xs); font-weight: 600;
+      padding: 2px var(--space-1); border-radius: var(--radius-sm);
+    }
+    .filter-clear-all-btn:hover { color: var(--color-red); }
+    .filter-clear-all-btn.hidden { visibility: hidden; pointer-events: none; }
+    .filter-toggle-btn {
+      background: transparent; border: 0; cursor: pointer;
+      color: var(--color-text-faint); font-size: .85rem; line-height: 1;
+      padding: 2px 4px; border-radius: var(--radius-sm); font-family: var(--font-body);
+    }
+    .filter-toggle-btn:hover { color: var(--color-text-muted); background: var(--color-surface-offset); }
+    .filter-body { flex: 1; overflow-y: auto; padding: var(--space-2) 0; }
+    .filter-sidebar.collapsed .filter-body { display: none; }
+    .filter-section-rail {
+      display: flex; align-items: stretch;
+    }
+    .filter-section-hd {
+      flex: 1; min-width: 0; text-align: left; display: flex; align-items: center;
+      gap: var(--space-2); padding: var(--space-2) var(--space-3);
+      background: transparent; border: 0; cursor: pointer;
+      font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-body); user-select: none;
+    }
+    .filter-section-hd:hover { color: var(--color-text-muted); }
+    .filter-section-hd.has-sel { color: var(--color-primary); }
+    .filter-sec-clear {
+      background: transparent; border: 0; cursor: pointer;
+      color: var(--color-text-faint); font-size: 1rem; line-height: 1;
+      padding: 2px 7px; border-radius: var(--radius-sm); flex-shrink: 0;
+      font-family: var(--font-body); align-self: center;
+    }
+    .filter-sec-clear:hover { color: var(--color-red); background: var(--color-surface-offset); }
+    .filter-sec-clear.hidden { display: none; }
+    .filter-section-caret { margin-left: auto; font-size: .5rem; }
+    .filter-badge {
+      font-size: .6rem; background: var(--color-primary); color: var(--color-text-inverse);
+      border-radius: var(--radius-full); padding: 0 4px; min-width: 14px; height: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700; letter-spacing: 0;
+    }
+    .filter-badge.hidden { display: none; }
+    .filter-section-body { display: none; }
+    .filter-section.open .filter-section-body { display: block; }
+    .filter-item {
+      display: block; width: 100%; text-align: left; background: transparent;
+      border: 0; cursor: pointer; padding: 3px var(--space-3);
+      font-size: var(--text-xs); color: var(--color-text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--font-body);
+    }
+    .filter-item:hover { background: var(--color-white-soft); color: var(--color-text); }
+    .filter-item.selected { background: var(--color-primary-highlight); color: var(--color-primary); font-weight: 600; }
+    .filter-item.dim { opacity: .45; }
+    .filter-sublevel { margin-left: var(--space-3); border-left: 1px solid var(--color-border); padding: var(--space-1) 0; margin-top: var(--space-1); }
+    .filter-sublevel-hd {
+      font-size: .6rem; color: var(--color-text-faint); font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      padding: var(--space-1) var(--space-3); display: flex; align-items: center; justify-content: space-between;
+    }
+    .filter-clear-btn {
+      font-size: var(--text-xs); color: var(--color-text-faint);
+      background: transparent; border: 0; cursor: pointer;
+      padding: 2px var(--space-3); text-align: left; font-family: var(--font-body);
+    }
+    .filter-clear-btn:hover { color: var(--color-text-muted); text-decoration: underline; }
+    .filter-clear-inline { font-size: .6rem; color: var(--color-text-faint); background: transparent; border: 0; cursor: pointer; font-family: var(--font-body); padding: 0; }
+    .filter-clear-inline:hover { color: var(--color-text-muted); text-decoration: underline; }
+    .filter-divider { height: 1px; background: var(--color-border); margin: var(--space-1) 0; }
+
+    /* ── Analytics Panel ── */
+    .analytics-panel {
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
+      overflow: hidden;
+    }
+    .analytics-inner {
+      display: flex; gap: var(--space-5);
+      padding: var(--space-3) var(--space-4);
+      overflow-x: auto; align-items: flex-start;
+    }
+    .analytics-tiles {
+      display: flex; gap: var(--space-3); flex-shrink: 0; align-items: stretch;
+    }
+    .analytics-tile {
+      background: var(--color-surface-2); border: 1px solid var(--color-border);
+      border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+      min-width: 96px; text-align: center; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: .2rem;
+    }
+    .analytics-tile strong {
+      display: block; font-size: var(--text-lg);
+      font-variant-numeric: tabular-nums lining-nums; line-height: 1.1;
+    }
+    .analytics-tile span { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+    .analytics-chart-wrap { flex: 1; min-width: 320px; overflow: hidden; }
+    .analytics-chart-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: var(--space-2);
+    }
+    .analytics-chart-title {
+      font-size: var(--text-xs); text-transform: uppercase;
+      letter-spacing: .07em; color: var(--color-text-faint); font-weight: 700;
+    }
+    .analytics-legend {
+      display: flex; gap: var(--space-3); font-size: var(--text-xs); color: var(--color-text-muted);
+    }
+    .analytics-legend-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+      vertical-align: middle; margin-right: .25rem;
+    }
+    .analytics-btn-active { background: var(--color-primary) !important; color: white !important; border-color: transparent !important; }
+
+    /* ── Active group (chart loaded for this group) ── */
+    .group-summary.chart-active {
+      border-left: 3px solid var(--color-primary);
+      padding-left: calc(var(--space-3) - 3px);
+    }
+
+    /* ── Price History Chart ── */
+    .price-chart-card {
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg);
+      padding: 0;
+      flex: 1 1 0; display: flex; flex-direction: column; min-height: 0;
+    }
+    .price-chart-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      padding: var(--space-3) var(--space-4) var(--space-1);
+      flex-shrink: 0;
+    }
+    .price-chart-header h2 {
+      margin: 0; font-size: var(--text-xs); font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-faint);
+    }
+    .price-chart-meta { font-size: var(--text-xs); color: var(--color-text-muted); }
+    .price-chart-wrap { padding: 0 var(--space-3) var(--space-3); flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #priceChartBody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .price-chart-msg {
+      padding: var(--space-2) var(--space-4) var(--space-3);
+      font-size: var(--text-xs); color: var(--color-text-faint); font-style: italic;
+    }
+
+  </style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a href="#main" class="sr-only">Skip to content</a>
+      <div class="brand-row">
+        <div class="brand">
+          <svg viewBox="0 0 64 64" fill="none" aria-label="Charizard Dealfinder logo">
+            <path d="M10 40c8-18 20-28 34-30-5 6-7 11-6 16 6 1 11 4 15 10-8-1-14 0-18 3-3 3-5 8-5 15-5-6-9-9-13-10-3-1-5-2-7-4Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+            <path d="M24 46c4-5 9-8 16-9" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+          <div class="brand-copy">
+            <h1>Charizard Dealfinder</h1>
+            <p>Live eBay market monitor · grouped by card identity</p>
+          </div>
+        </div>
+        <button class="theme-btn" data-theme-toggle aria-label="Switch theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+      <div class="search-row">
+        <label class="search-shell" aria-label="Search listings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input id="searchInput" type="text" placeholder="Search card, set, grade, seller…" />
+        </label>
+        <button class="search-btn" id="searchBtn">Search</button>
+        <button class="ghost-btn" id="toggleDebug">Debug</button>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="Result controls">
+      <div class="stats" id="statsBar"></div>
+      <div class="stats">
+        <button class="ghost-btn" id="analyticsBtn" style="font-size:var(--text-xs); min-height:28px; padding:0 var(--space-3);">Analytics</button>
+      </div>
+    </section>
+
+    <div class="analytics-panel" id="analyticsPanel" style="display:none;" aria-label="Market analytics">
+      <div class="analytics-inner">
+        <div class="analytics-tiles" id="analyticsTiles"></div>
+        <div class="analytics-chart-wrap">
+          <div class="analytics-chart-hd">
+            <span class="analytics-chart-title">Top cards by market activity</span>
+            <span class="analytics-legend">
+              <span><span class="analytics-legend-dot" style="background:var(--color-primary);"></span>Sold comps</span>
+              <span><span class="analytics-legend-dot" style="background:var(--color-border-strong);"></span>Ask listings</span>
+            </span>
+          </div>
+          <div id="analyticsChart"></div>
+        </div>
+      </div>
+    </div>
+
+    <main class="content" id="main">
+      <div class="filter-sidebar" id="filterSidebar">
+        <div class="filter-rail">
+          <button class="filter-clear-all-btn hidden" id="filterClearAll" title="Clear all filters">Clear all</button>
+          <button class="filter-toggle-btn" id="filterToggleBtn" title="Collapse filters">‹</button>
+        </div>
+        <div class="filter-body" id="filterBody">
+          <div class="filter-section" id="filterSecPokemon">
+            <div class="filter-section-rail">
+              <button class="filter-section-hd" id="filterHdPokemon">
+                <span>Pokémon</span>
+                <span class="filter-badge hidden" id="filterBadgePokemon"></span>
+                <span class="filter-section-caret">▶</span>
+              </button>
+              <button class="filter-sec-clear hidden" id="filterClearPokemon" title="Clear Pokémon filter">×</button>
+            </div>
+            <div class="filter-section-body" id="filterBodyPokemon"></div>
+          </div>
+          <div class="filter-divider"></div>
+          <div class="filter-section" id="filterSecSet">
+            <div class="filter-section-rail">
+              <button class="filter-section-hd" id="filterHdSet">
+                <span>Set</span>
+                <span class="filter-badge hidden" id="filterBadgeSet"></span>
+                <span class="filter-section-caret">▶</span>
+              </button>
+              <button class="filter-sec-clear hidden" id="filterClearSet" title="Clear Set filter">×</button>
+            </div>
+            <div class="filter-section-body" id="filterBodySet"></div>
+          </div>
+          <div class="filter-divider" id="filterDivCard" style="display:none"></div>
+          <div class="filter-section" id="filterSecCard" style="display:none">
+            <div class="filter-section-rail">
+              <button class="filter-section-hd" id="filterHdCard">
+                <span>Card</span>
+                <span class="filter-badge hidden" id="filterBadgeCard"></span>
+                <span class="filter-section-caret">▶</span>
+              </button>
+              <button class="filter-sec-clear hidden" id="filterClearCard" title="Clear Card filter">×</button>
+            </div>
+            <div class="filter-section-body" id="filterBodyCard"></div>
+          </div>
+          <div class="filter-divider"></div>
+          <div id="filterSecCondition" style="padding: var(--space-2) var(--space-3) var(--space-1);">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-1);">
+              <span style="font-size:.6rem; color:var(--color-text-faint); text-transform:uppercase; letter-spacing:.08em;">Condition</span>
+              <button id="condClearBtn" style="display:none; font-size:.6rem; color:var(--color-text-faint); background:transparent; border:0; cursor:pointer; padding:0; font-family:var(--font-body);" title="Clear condition filter">Clear ×</button>
+            </div>
+            <div id="conditionBar"></div>
+          </div>
+        </div>
+      </div>
+      <section class="results-pane">
+        <div class="table-head">
+          <span>Img</span>
+          <span style="color:var(--color-text-faint); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.07em;">Title</span>
+          <span style="display:flex; flex-wrap:nowrap; gap:.3rem; align-items:center;">
+            <span style="color:var(--color-text-faint); white-space:nowrap;">Sort by:</span>
+            <button class="sort-btn" data-sort="listings"># List.</button>
+            <button class="sort-btn" data-sort="groupprice">Best&nbsp;$</button>
+            <button class="sort-btn" data-sort="groupmarket">%&nbsp;Mkt</button>
+          </span>
+          <span style="color:var(--color-text-faint); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.07em;">Listed</span>
+          <span style="color:var(--color-text-faint); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.07em;">Seller</span>
+          <span style="text-align:right; color:var(--color-text-faint); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.07em;">Price</span>
+          <span style="text-align:right; color:var(--color-text-faint); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.07em;">vs Market</span>
+        </div>
+        <div id="results"></div>
+      </section>
+
+      <aside class="detail-pane">
+        <div class="side-card">
+          <h2>Selected listing</h2>
+          <div id="selectedSummary" class="subtle">Pick a row to inspect.</div>
+        </div>
+        <div class="side-card price-chart-card" id="priceHistoryCard">
+          <div class="price-chart-header">
+            <h2>Price history</h2>
+            <span class="price-chart-meta" id="priceChartMeta"></span>
+          </div>
+          <div id="priceChartBody">
+            <div class="price-chart-msg">Expand a card group to view its price history.</div>
+          </div>
+        </div>
+        <div class="side-card">
+          <h2>Item specifics</h2>
+          <dl class="kv" id="debugPanel"></dl>
+        </div>
+        <div class="side-card" id="detailImageCard" style="display:none;">
+          <h2>Images</h2>
+          <div class="detail-image-stage" id="detailImageStage">
+            <img id="detailImage" alt="Listing image" />
+          </div>
+          <div class="detail-image-footer">
+            <span class="subtle" id="detailImageCount">Image 1 of 1</span>
+            <div class="detail-image-nav">
+              <button class="icon-btn" id="detailPrevImg" aria-label="Previous image">◀</button>
+              <button class="icon-btn" id="detailNextImg" aria-label="Next image">▶</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="selection-bar">
+      <div class="selection-meta" id="selectionMeta">
+        <strong>No listing selected</strong>
+        <span>Select a row to activate the action bar.</span>
+      </div>
+      <div style="display:flex; gap:var(--space-2); flex-wrap:wrap;">
+        <button class="ghost-btn" id="previewBtn">Preview images</button>
+        <a class="buy-btn" id="buyLink" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none; min-width:130px; opacity:.4; pointer-events:none;">Open on eBay</a>
+      </div>
+    </footer>
+  </div>
+
+  <div class="modal" id="imageModal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-stage"><img id="modalImage" alt="Listing preview" /></div>
+      <div class="modal-footer">
+        <div>
+          <strong id="modalTitle">Image preview</strong>
+          <div class="subtle" id="modalCount">Image 1 of 1</div>
+        </div>
+        <div class="modal-nav">
+          <button class="icon-btn" id="prevImg" aria-label="Previous image">◀</button>
+          <button class="icon-btn" id="nextImg" aria-label="Next image">▶</button>
+          <button class="icon-btn" id="closeModal" aria-label="Close image preview">✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const themeToggle = document.querySelector('[data-theme-toggle]');
+    let currentTheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    const moon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    const sun = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    themeToggle.innerHTML = currentTheme === 'dark' ? moon : sun;
+    themeToggle.addEventListener('click', () => {
+      currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', currentTheme);
+      themeToggle.innerHTML = currentTheme === 'dark' ? moon : sun;
+    });
+
+    
+    
+const SUPABASE_URL = 'https://jllwvohrxtzmtmqwjqzl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsbHd2b2hyeHR6bXRtcXdqcXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MTc4ODUsImV4cCI6MjA5NzM5Mzg4NX0.2Pr95J16g10C5P6_TwrKwAd_QWPnlBx8lF3JGomz5qE';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── TEMPORARY: limit view to listings imported in the last N hours ──────────
+// Set to false (or remove this block) to restore the full view.
+const TEMP_12H_FILTER = true;
+const TEMP_12H_HOURS  = 12;
+// ────────────────────────────────────────────────────────────────────────────
+
+    // Raw market_stats rows — populated by fetchMarketStats(), read by renderAnalytics()
+    let allStatsRows = [];
+
+// Scalability note (session #39): this used to be a single
+// .from('charizard_listing_view_app').limit(1000) call, which silently
+// dropped any active listings beyond the first 1000 (confirmed: 10,034
+// active Charizard listings exist as of this session, ~9000 of which never
+// reached the UI). Group count (1668 today) is bounded by the card catalog
+// and grows far slower than listing volume, so the fix is to load summaries
+// per GROUP (one row each, via the get_active_group_summaries() RPC) up
+// front, and only fetch a group's actual listings (via get_group_listings())
+// when the user expands it. This scales to millions of listings without
+// ever pulling more than one group's worth of rows into the browser at once.
+async function fetchGroupSummaries() {
+  // PostgREST enforces a server-side max-rows cap (1000 by default) that
+  // .limit() alone cannot override. There are 1668+ active groups (bounded
+  // by the card catalog), so we paginate with Range headers until done.
+  // Typically 2 pages; stops as soon as a page is shorter than PAGE_SIZE.
+  const PAGE_SIZE = 1000;
+  const all = [];
+  let offset = 0;
+  // TEMP: use time-scoped RPC when filter is active.
+  const rpcName = TEMP_12H_FILTER ? 'get_group_summaries_since' : 'get_active_group_summaries';
+  const rpcArgs = TEMP_12H_FILTER ? { p_since: getTempSinceCutoff() } : {};
+  while (true) {
+    const { data, error } = await supabaseClient
+      .rpc(rpcName, rpcArgs)
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
+  }
+  return all;
+}
+
+
+// Returns the ISO cutoff timestamp for the temporary time filter.
+function getTempSinceCutoff() {
+  return new Date(Date.now() - TEMP_12H_HOURS * 60 * 60 * 1000).toISOString();
+}
+
+// Fetches the actual listings for one group, paginated. Default page size
+// (1000) comfortably covers every group seen in production today (largest
+// is ~530 rows) while still protecting against a single freak group ever
+// blowing up page weight if the catalog grows substantially.
+async function fetchGroupRows(groupKey, { limit = 1000, offset = 0 } = {}) {
+  const args = {
+    p_group_key: groupKey,
+    p_limit: limit,
+    p_offset: offset,
+    // Note: p_since intentionally NOT passed here. The 12h filter applies
+    // to group summaries (which groups appear in the list), not to individual
+    // group row fetches — when a user expands a group they want all listings.
+  };
+  const t0 = performance.now();
+  const { data, error } = await supabaseClient.rpc('get_group_listings', args);
+  const rpcMs = Math.round(performance.now() - t0);
+  console.log(`[perf #35] RPC get_group_listings(${groupKey}): ${rpcMs}ms → ${(data||[]).length} rows`);
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchMarketStats() {
+  // Returns a Map of normalized_item_key -> stats row, so groups can show a
+  // real, server-computed market price (sold comps + asking, recency-weighted,
+  // outlier-filtered -- see compute_market_stats.py) instead of a same-page
+  // client-side median that only reflects whatever rows happened to load.
+  const { data, error } = await supabaseClient
+    .from('market_stats')
+    .select('normalized_item_key,median_price,sold_median,ask_median,n_sold_filtered,n_ask_filtered,confidence,last_refreshed_at');
+
+  if (error) {
+    console.error('Failed to load market_stats; falling back to client-side medians.', error);
+    return new Map();
+  }
+  allStatsRows = data || [];
+  return new Map(allStatsRows.map(row => [row.normalized_item_key, row]));
+}
+
+function parsePrice(value) {
+  // Number(null) is 0 in JS, and 0 passes Number.isFinite() -- so a genuinely
+  // missing price would silently become $0 instead of staying "missing".
+  // Check for null/undefined explicitly, before any numeric coercion.
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatPrice(value) {
+  return Number.isFinite(value) ? `$${value.toLocaleString()}` : '—';
+}
+
+const DATE_LISTED_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function formatDateListed(date) {
+  if (!(date instanceof Date) || isNaN(date)) return '—';
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 8) return `${diffDays}d ago`;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const label = `${DATE_LISTED_MONTHS[date.getMonth()]} ${date.getDate()}`;
+  return sameYear ? label : `${label} '${String(date.getFullYear()).slice(2)}`;
+}
+
+function median(values) {
+  const nums = values
+    .map(v => Number(v))
+    .filter(v => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  if (!nums.length) return null;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function pctOf(price, med) {
+  if (!Number.isFinite(price) || !Number.isFinite(med) || med <= 0) return null;
+  return Math.round((price / med) * 100);
+}
+
+
+function asciiSlug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
+}
+
+function normalizeSetCode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  const compact = asciiSlug(raw);
+
+  const map = {
+    'base set': 'bs',
+    'base-set': 'bs',
+    'baseset': 'bs',
+    'obsidian flames': 'obsidianflames',
+    'obsidian-flames': 'obsidianflames',
+    'paldean fates': 'paldeanfates',
+    'paldean-fates': 'paldeanfates',
+    'vmax climax': 'vmaxclimax',
+    'vmax-climax': 'vmaxclimax',
+    'flashfire': 'flashfire',
+    'promo': 'promo',
+    '151': '151'
+  };
+
+  return map[raw] || map[compact] || compact || 'unknown';
+}
+
+function normalizeLanguageCode(value) {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw.includes('japanese') || raw === 'jp' || raw === 'ja') return 'jp';
+  if (raw === 'english' || raw === 'en') return 'en'; // 'English/Unknown' does NOT match
+  return ''; // Unknown/undetected = no suffix
+}
+
+function normalizeGradeState(row) {
+  const company = asciiSlug(row.grade_company || '');
+  const gradeRaw = String(row.grade_value || '').trim();
+  const gradeCompact = gradeRaw.replace(/[^0-9]/g, '');
+  if (company && gradeCompact) return `${company}${gradeCompact}`;
+  if (String(row.variant_guess || '').toLowerCase() === 'graded') return 'graded';
+  return 'raw';
+}
+
+function splitDisplayCardIdentity(row) {
+  const promo = String(row.promo_code_guess || row.promo_code || '').trim();
+  if (promo) {
+    return { display: promo.toUpperCase(), parts: [promo.toLowerCase()] };
+  }
+
+  const norm = String(row.card_number_norm || row.card_number || '').trim();
+  const guess = String(row.card_number_guess || '').trim();
+
+  if (norm && guess && /^0*\d{1,3}\d{2,3}$/.test(guess)) {
+    const left = String(parseInt(norm, 10));
+    let right = guess.slice(left.length);
+    right = right.replace(/^0+/, '') || right;
+    if (right) return { display: `${left}/${right}`, parts: [left, right] };
+  }
+
+  if (guess && /^\d{1,3}\/\d{2,3}$/.test(guess)) {
+    const parts = guess.split('/');
+    return { display: guess, parts };
+  }
+
+  if (norm) return { display: norm, parts: [String(parseInt(norm, 10))] };
+  if (guess) return { display: guess, parts: [guess.toLowerCase()] };
+
+  return { display: '—', parts: [] };
+}
+
+function buildGroupLabel(row) {
+  const name = 'Charizard';
+  const setName = String(row.display_set || row.imported_set_name || row.set_guess || 'Unknown set').trim();
+  const card = splitDisplayCardIdentity(row).display;
+  // normalizeGradeState() already distinguishes raw vs. graded (and even the
+  // specific grade, e.g. "psa10") for the debug panel -- reuse it here so the
+  // title suffix can never disagree with how the row is actually classified.
+  const gradeState = normalizeGradeState(row);
+  const gradeSuffix = gradeState === 'raw' ? 'Raw' : 'Graded';
+  return `${name} – ${setName} – ${card} – ${gradeSuffix}`;
+}
+
+function buildNormalizedItemId(row) {
+  // The backend parser emits normalized_item_key as the canonical, structured,
+  // cross-domain group identity (e.g. "charizard_obf_223_197_raw"). Prefer it so
+  // the displayed item ID and the key the UI groups on are always the same string.
+  if (row.normalized_item_key) return row.normalized_item_key;
+
+  // Fallback recipe, used only if a row arrives without a backend key. Kept in the
+  // same shape as the backend so any computed id still lines up with the group key.
+  const setCode = normalizeSetCode(row.display_set || row.imported_set_name || row.set_guess || '');
+  const cardName = 'charizard';
+  const cardParts = splitDisplayCardIdentity(row).parts.map(p => asciiSlug(p)).filter(Boolean);
+  const gradeState = normalizeGradeState(row);
+  const lang = normalizeLanguageCode(row.language_guess || row.language || '');
+  return ['pokemon', setCode, cardName, ...cardParts, gradeState, lang].filter(Boolean).join('_');
+}
+
+function rowDebugFromLive(row) {
+  return {
+    matchedcardid: row.matched_card_id ?? '',
+    normalizeditemkey: row.normalized_item_key ?? '',
+    setguess: row.display_set ?? row.set_guess ?? '',
+    cardnumbernorm: row.card_number_norm ?? row.card_number ?? '',
+    cardnumberguess: row.card_number_guess ?? '',
+    promocodeguess: row.promo_code_guess ?? row.promo_code ?? '',
+    variantguess: row.variant_guess ?? '',
+    languageguess: row.language_guess ?? row.language ?? '',
+    matchconfidence: row.match_confidence ?? '',
+    identitystatus: row.identity_status ?? '',
+    parsedtitle: row.parsed_title ?? '',
+    rawtitle: row.raw_title ?? ''
+  };
+}
+
+// Client-side raw condition parser — mirrors Python parse_raw_condition().
+// Used as fallback when DB raw_condition is null (pre-backfill rows).
+// HP uses negative lookahead to avoid matching hit-point notation "HP 330".
+const RAW_COND_RE = /\b(near[\s-]?mint|lightly[\s-]?played|moderately[\s-]?played|heavily[\s-]?played|nm\/m|nm|lp\+?|mp|hp(?!\s*\d))\b/i;
+function parseRawConditionFromTitle(title) {
+  const m = RAW_COND_RE.exec(String(title || ''));
+  if (!m) return null;
+  const r = m[1].toLowerCase().replace(/[\s\-\/]/g, '');
+  if (r === 'nm' || r === 'nmm' || r.startsWith('near')) return 'NM';
+  if (r === 'lp' || r === 'lp+' || r.startsWith('lightly')) return 'LP';
+  if (r === 'mp' || r.startsWith('moderately')) return 'MP';
+  if (r === 'hp' || r.startsWith('heavily')) return 'HP';
+  return null;
+}
+
+// Builds a single UI-shaped row object from one raw record returned by
+// either charizard_listing_view_app or the get_group_listings() RPC (same
+// column shape). Pulled out of mapLiveRowsToGroups so the lazy per-group
+// fetch path can build rows the same way without duplicating this logic.
+function buildRowFromLive(row) {
+  const images = row.primary_image_url
+    ? [row.primary_image_url]
+    : (Array.isArray(row.parser_notes?.images) ? row.parser_notes.images : []);
+
+  const normalizedItemId = buildNormalizedItemId(row);
+  const displayIdentity = splitDisplayCardIdentity(row).display;
+
+  return {
+    title: row.raw_title || row.parsed_title || 'Untitled listing',
+    id: row.source_listing_id ? String(row.source_listing_id) : String(row.market_listing_id ?? ''),
+    sourceListingId: row.source_listing_id ? String(row.source_listing_id) : '',
+    qty: 1,
+    seller: row.seller_name || 'eBay seller',
+    sellerUrl: row.seller_name ? `https://www.ebay.com/usr/${encodeURIComponent(row.seller_name)}` : '',
+    price: parsePrice(row.current_price_value ?? row.price_value),
+    medianPct: null,
+    condition: row.condition_text || row.variant_guess || 'Unknown',
+    url: row.listing_url || '',
+    images,
+    cardId: row.matched_card_id ? Number(row.matched_card_id) : null,
+    pokemonName: row.pokemon_name || null, // direct from view, no catalog lookup needed
+    // Condition detail — DB value first (always lowercase: nm/lp/mp/hp), then client-side
+    // title parse as fallback. Normalize to lowercase so both sources match the chip values.
+    rawCondition: (rc => rc ? rc.toLowerCase() : null)(
+      row.raw_condition || parseRawConditionFromTitle(row.raw_title || '') || null
+    ),
+    gradeValue: row.grade_value != null ? Number(row.grade_value) : null,
+    gradeCompany: row.grade_company || null,
+    isGraded: String(row.condition_text || '').toLowerCase() === 'graded' || !!row.grade_company,
+    firstSeenAt: row.first_seen_at ? new Date(row.first_seen_at) : null,
+    debug: {
+      ...rowDebugFromLive(row),
+      normalizeditemid: normalizedItemId,
+      displayidentity: displayIdentity
+    }
+  };
+}
+
+// Client-side junk filter — catches DIY, fan art, and display-only listings that
+// slip past the ingest-level junk detection. Applied when building rows from live data.
+const JUNK_TITLE_RE = /\b(diy|fan\s*art|custom.{0,10}card|metal\s*card|display\s*only|for\s*display|gift.{0,15}card|handmade|inspired.*display)\b/i;
+function isJunkRow(row) {
+  const variant = String(row.debug?.variantguess || '').toLowerCase();
+  if (variant === 'custom / fan art') return true;
+  return JUNK_TITLE_RE.test(row.title || '');
+}
+
+function mapLiveRowsToGroups(rows, statsByKey = new Map()) {
+  const byGroup = new Map();
+
+  for (const row of rows) {
+    const groupKey = row.app_group_key || row.normalized_item_key || `listing-${row.market_listing_id}`;
+
+    if (!byGroup.has(groupKey)) {
+      byGroup.set(groupKey, {
+        groupKey,
+        groupLabel: row.app_group_label || row.raw_title || `Listing ${row.market_listing_id}`,
+        itemId: row.display_card_identity || row.market_listing_id,
+        listings: 0,
+        medianPrice: null,
+        compCount: 0,
+        rows: []
+      });
+    }
+
+    const group = byGroup.get(groupKey);
+    const normalizedItemId = buildNormalizedItemId(row);
+    group.groupLabel = buildGroupLabel(row);
+    group.itemId = normalizedItemId;
+
+    const builtRow = buildRowFromLive(row); if (!isJunkRow(builtRow)) group.rows.push(builtRow);
+    group.listings += 1;
+  }
+
+  const groups = Array.from(byGroup.values());
+
+  for (const group of groups) {
+    const prices = group.rows.map(r => r.price).filter(v => Number.isFinite(v));
+    group.medianPrice = median(prices);
+
+    // Server-computed market price (sold comps + asking, recency-weighted,
+    // outlier-filtered, with a confidence tier) -- see
+    // charizard_dealfinder_pricing_spec.md and compute_market_stats.py.
+    // Falls back to the client-side median for groups that haven't had stats
+    // computed yet (e.g. brand-new groups since the last batch run).
+    const stats = statsByKey.get(group.groupKey) || null;
+    group.marketPrice = stats?.median_price ?? null;
+    group.confidence = stats?.confidence ?? null;
+    group.soldMedian = stats?.sold_median ?? null;
+    group.askMedian = stats?.ask_median ?? null;
+    group.nSoldFiltered = stats?.n_sold_filtered ?? null;
+    group.nAskFiltered = stats?.n_ask_filtered ?? null;
+    group.statsUpdatedAt = stats?.last_refreshed_at ?? null;
+
+    const referencePrice = Number.isFinite(group.marketPrice) ? group.marketPrice : group.medianPrice;
+
+    group.rows = group.rows
+      .map(r => ({
+        ...r,
+        medianPct: pctOf(r.price, referencePrice)
+      }))
+      .sort((a, b) => {
+        const ap = Number.isFinite(a.price) ? a.price : Number.POSITIVE_INFINITY;
+        const bp = Number.isFinite(b.price) ? b.price : Number.POSITIVE_INFINITY;
+        return ap - bp;
+      });
+  }
+
+  return groups.sort((a, b) => {
+    const am = Number.isFinite(a.marketPrice) ? a.marketPrice : (Number.isFinite(a.medianPrice) ? a.medianPrice : Number.POSITIVE_INFINITY);
+    const bm = Number.isFinite(b.marketPrice) ? b.marketPrice : (Number.isFinite(b.medianPrice) ? b.medianPrice : Number.POSITIVE_INFINITY);
+    return am - bm;
+  });
+}
+
+// Builds the initial group list from get_active_group_summaries() -- one
+// row per group, not one row per listing. Each group starts with only its
+// "best" (cheapest) row loaded as a placeholder so the UI has something to
+// show immediately; the rest of that group's listings are fetched lazily
+// (see loadGroupRows below) only when the user expands it. This is what
+// lets the page handle far more than 1000 active listings: group count is
+// bounded by the card catalog, not by how many sellers are listing things.
+function mapSummariesToGroups(summaries, statsByKey = new Map()) {
+  const groups = summaries.map(s => {
+    const bestRowLike = {
+      raw_title: s.best_title,
+      market_listing_id: s.best_listing_id,
+      source_listing_id: s.best_source_listing_id,
+      listing_url: s.best_url,
+      current_price_value: s.best_price,
+      seller_name: s.best_seller,
+      condition_text: s.best_condition,
+      primary_image_url: s.best_images,
+      display_set: s.display_set,
+      card_number_norm: s.card_number_norm,
+      card_number_guess: s.card_number_guess,
+      promo_code_guess: s.promo_code,
+      variant: s.variant,
+      language: s.language,
+      match_confidence: s.match_confidence,
+      app_group_key: s.group_key,
+      app_group_label: s.group_label
+    };
+    const bestRow = buildRowFromLive(bestRowLike);
+    const referencePrice = Number.isFinite(s.median_price) ? Number(s.median_price) : bestRow.price;
+    bestRow.medianPct = pctOf(bestRow.price, referencePrice);
+
+    return {
+      groupKey: s.group_key,
+      groupLabel: buildGroupLabel(bestRowLike),
+      itemId: buildNormalizedItemId(bestRowLike),
+      listings: Number(s.listing_count) || 1,
+      totalListingCount: Number(s.listing_count) || 1,
+      medianPrice: Number.isFinite(s.median_price) ? Number(s.median_price) : bestRow.price,
+      compCount: 0,
+      rows: [bestRow],
+      rowsLoaded: false,
+      rowsLoading: false
+    };
+  });
+
+  for (const group of groups) {
+    const stats = statsByKey.get(group.groupKey) || null;
+    group.marketPrice = stats?.median_price ?? null;
+    group.confidence = stats?.confidence ?? null;
+    group.soldMedian = stats?.sold_median ?? null;
+    group.askMedian = stats?.ask_median ?? null;
+    group.nSoldFiltered = stats?.n_sold_filtered ?? null;
+    group.nAskFiltered = stats?.n_ask_filtered ?? null;
+    group.statsUpdatedAt = stats?.last_refreshed_at ?? null;
+  }
+
+  return groups.sort((a, b) => {
+    const am = Number.isFinite(a.marketPrice) ? a.marketPrice : (Number.isFinite(a.medianPrice) ? a.medianPrice : Number.POSITIVE_INFINITY);
+    const bm = Number.isFinite(b.marketPrice) ? b.marketPrice : (Number.isFinite(b.medianPrice) ? b.medianPrice : Number.POSITIVE_INFINITY);
+    return am - bm;
+  });
+}
+
+// Fetches and fills in the full listing set for one group (replacing its
+// single placeholder "best" row), recomputing medianPct against the same
+// reference price logic mapLiveRowsToGroups uses. Idempotent: if rows are
+// already loaded or a load is already in flight, it's a no-op.
+async function loadGroupRows(group) {
+  if (group.rowsLoaded || group.rowsLoading) return false;
+  group.rowsLoading = true;
+  try {
+    const rawRows = await fetchGroupRows(group.groupKey, { limit: 1000 });
+    if (rawRows.length === 0) return false;
+
+    const tProc = performance.now();
+    const rows = rawRows.map(buildRowFromLive).filter(r => !isJunkRow(r));
+    const referencePrice = Number.isFinite(group.marketPrice) ? group.marketPrice : group.medianPrice;
+    group.rows = rows
+      .map(r => ({ ...r, medianPct: pctOf(r.price, referencePrice) }))
+      .sort((a, b) => {
+        const ap = Number.isFinite(a.price) ? a.price : Number.POSITIVE_INFINITY;
+        const bp = Number.isFinite(b.price) ? b.price : Number.POSITIVE_INFINITY;
+        return ap - bp;
+      });
+    group.listings = group.rows.length;
+    group.rowsLoaded = true;
+    const totalCount = Number(rawRows[0]?.total_count);
+    if (Number.isFinite(totalCount)) group.totalListingCount = totalCount;
+    console.log(`[perf #35] JS processing (buildRowFromLive + sort): ${Math.round(performance.now() - tProc)}ms → ${group.rows.length} rows kept`);
+    return true;
+  } finally {
+    group.rowsLoading = false;
+  }
+}
+
+
+const sampleData = [
+  {
+    "groupKey": "charizard_obf_223_197_raw",
+    "groupLabel": "Obsidian Flames 223/197",
+    "itemId": "charizard_obf_223_197_raw",
+    "listings": 2,
+    "medianPrice": 73.0,
+    "compCount": 0,
+    "rows": [
+      {
+        "title": "Charizard ex 223/197 Obsidian Flames SIR Holo Near Mint",
+        "id": "v1|407019399375|0",
+        "sourceListingId": "v1|407019399375|0",
+        "qty": 1,
+        "seller": "lo-131842",
+        "sellerUrl": "https://www.ebay.com/usr/lo-131842",
+        "price": 76.3,
+        "medianPct": 105,
+        "condition": "Ungraded",
+        "url": "https://www.ebay.com/itm/407019399375",
+        "images": ["https://i.ebayimg.com/images/g/~-EAAeSwwOxqKiV3/s-l1600.jpg"],
+        "rawCondition": null,
+        "gradeValue": null,
+        "gradeCompany": null,
+        "isGraded": false,
+        "debug": {
+          "matchedcardid": "charizard_obf_223_197_raw",
+          "normalizeditemkey": "charizard_obf_223_197_raw",
+          "setguess": "Obsidian Flames",
+          "cardnumbernorm": "223/197",
+          "cardnumberguess": "223/197",
+          "promocodeguess": "",
+          "variantguess": "raw",
+          "languageguess": "English/Unknown",
+          "matchconfidence": 0.95,
+          "identitystatus": "",
+          "parsedtitle": "",
+          "rawtitle": "Charizard ex 223/197 Obsidian Flames SIR Holo Near Mint",
+          "normalizeditemid": "charizard_obf_223_197_raw",
+          "displayidentity": "223/197"
+        }
+      },
+      {
+        "title": "Charizard ex 223/197 SV03: Obsidian Flames Holo",
+        "id": "v1|278115873371|0",
+        "sourceListingId": "v1|278115873371|0",
+        "qty": 1,
+        "seller": "tpc34",
+        "sellerUrl": "https://www.ebay.com/usr/tpc34",
+        "price": 110.0,
+        "medianPct": 151,
+        "condition": "Ungraded",
+        "url": "https://www.ebay.com/itm/278115873371",
+        "images": ["https://i.ebayimg.com/images/g/T3UAAeSwGN5qOZ93/s-l1600.jpg"],
+        "rawCondition": null,
+        "gradeValue": null,
+        "gradeCompany": null,
+        "isGraded": false,
+        "debug": {
+          "matchedcardid": "charizard_obf_223_197_raw",
+          "normalizeditemkey": "charizard_obf_223_197_raw",
+          "setguess": "Obsidian Flames",
+          "cardnumbernorm": "223/197",
+          "cardnumberguess": "223/197",
+          "promocodeguess": "",
+          "variantguess": "raw",
+          "languageguess": "English/Unknown",
+          "matchconfidence": 0.95,
+          "identitystatus": "",
+          "parsedtitle": "",
+          "rawtitle": "Charizard ex 223/197 SV03: Obsidian Flames Holo",
+          "normalizeditemid": "charizard_obf_223_197_raw",
+          "displayidentity": "223/197"
+        }
+      }
+    ]
+  },
+  {
+    "groupKey": "charizard_paf_54_91_raw",
+    "groupLabel": "Paldean Fates 54/91",
+    "itemId": "charizard_paf_54_91_raw",
+    "listings": 1,
+    "medianPrice": 5.97,
+    "compCount": 0,
+    "rows": [
+      {
+        "title": "Charizard ex 054/091 Double Rare Paldean Fates Pokemon Holo Near Mint",
+        "id": "v1|137444451932|0",
+        "sourceListingId": "v1|137444451932|0",
+        "qty": 1,
+        "seller": "danielf003",
+        "sellerUrl": "https://www.ebay.com/usr/danielf003",
+        "price": 3.0,
+        "medianPct": 50,
+        "condition": "Ungraded",
+        "url": "https://www.ebay.com/itm/137444451932",
+        "images": ["https://i.ebayimg.com/images/g/UtEAAeSwvqtqOfzK/s-l225.jpg"],
+        "rawCondition": null,
+        "gradeValue": null,
+        "gradeCompany": null,
+        "isGraded": false,
+        "debug": {
+          "matchedcardid": "charizard_paf_54_91_raw",
+          "normalizeditemkey": "charizard_paf_54_91_raw",
+          "setguess": "Paldean Fates",
+          "cardnumbernorm": "054/091",
+          "cardnumberguess": "054/091",
+          "promocodeguess": "",
+          "variantguess": "raw",
+          "languageguess": "English/Unknown",
+          "matchconfidence": 0.95,
+          "identitystatus": "",
+          "parsedtitle": "",
+          "rawtitle": "Charizard ex 054/091 Double Rare Paldean Fates Pokemon Holo Near Mint",
+          "normalizeditemid": "charizard_paf_54_91_raw",
+          "displayidentity": "054/091"
+        }
+      }
+    ]
+  }
+];
+
+    const mergedSampleData = mergeGroupsByDisplayedItemId(sampleData);
+
+    // Sample data is for explicit testing/screenshots only (?demo=1) -- never
+    // shown to a real visitor by accident. If live data fails to load, the
+    // honest answer is an error message, not fabricated listings and prices.
+    const isDemoMode = new URLSearchParams(window.location.search).has('demo');
+
+    const state = {
+      groups: isDemoMode ? mergedSampleData : [],
+      filtered: isDemoMode ? mergedSampleData : [],
+      loadStatus: isDemoMode ? 'ready' : 'loading', // 'loading' | 'ready' | 'error'
+      selected: null,
+      sortKey: 'groupmarket',
+      sortDir: 'asc',
+      debugVisible: true,
+      modalImages: [],
+      modalIndex: 0,
+      detailImageIndex: 0,
+      analyticsVisible: false,
+      conditionFilter: { type: 'all', sub: null },
+    };
+
+    // Condition index: groupKey → { gradeValues: number[], rawConditions: string[] }
+    // Fetched once from get_condition_group_index() RPC; used for sub-condition group filtering
+    // and to populate grade chips without requiring group expansion.
+    let conditionIndex = new Map(); // null = not yet fetched
+    let conditionIndexLoading = false;
+
+    async function ensureConditionIndex() {
+      if (conditionIndex.size > 0 || conditionIndexLoading) return;
+      conditionIndexLoading = true;
+      try {
+        const { data, error } = await supabaseClient.rpc('get_condition_group_index');
+        if (error) throw error;
+        for (const row of (data || [])) {
+          conditionIndex.set(row.group_key, {
+            gradeValues: (row.grade_values || []).map(Number).sort((a, b) => b - a),
+            rawConditions: row.raw_conditions || [],
+          });
+        }
+        // Refresh the UI so grade chips / group counts update now that index is ready
+        if (state.loadStatus === 'ready') render();
+      } catch (e) {
+        console.warn('condition index fetch failed:', e);
+      } finally {
+        conditionIndexLoading = false;
+      }
+    }
+
+    const STORAGE_KEY = 'charizardBrowseBuyStateV1';
+
+    function saveUiState() {
+      try {
+        const openGroups = [...document.querySelectorAll('.group.expanded')].map(el => el.dataset.groupKey);
+        const payload = {
+          scrollTop: document.querySelector('.results-pane')?.scrollTop || 0,
+          selectedId: state.selected?.id || null,
+          search: els.searchInput?.value || '',
+          sortKey: state.sortKey,
+          sortDir: state.sortDir,
+          debugVisible: state.debugVisible,
+          openGroups
+        };
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {}
+    }
+
+    function readUiState() {
+      try {
+        return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    const els = {
+      searchInput: document.getElementById('searchInput'),
+      searchBtn: document.getElementById('searchBtn'),
+      results: document.getElementById('results'),
+      statsBar: document.getElementById('statsBar'),
+      selectionMeta: document.getElementById('selectionMeta'),
+      selectedSummary: document.getElementById('selectedSummary'),
+      debugPanel: document.getElementById('debugPanel'),
+      buyLink: document.getElementById('buyLink'),
+      previewBtn: document.getElementById('previewBtn'),
+      imageModal: document.getElementById('imageModal'),
+      modalImage: document.getElementById('modalImage'),
+      modalTitle: document.getElementById('modalTitle'),
+      modalCount: document.getElementById('modalCount'),
+      prevImg: document.getElementById('prevImg'),
+      nextImg: document.getElementById('nextImg'),
+      closeModal: document.getElementById('closeModal'),
+      toggleDebug: document.getElementById('toggleDebug'),
+      detailImageCard: document.getElementById('detailImageCard'),
+      detailImageStage: document.getElementById('detailImageStage'),
+      detailImage: document.getElementById('detailImage'),
+      detailImageCount: document.getElementById('detailImageCount'),
+      detailPrevImg: document.getElementById('detailPrevImg'),
+      detailNextImg: document.getElementById('detailNextImg')
+    };
+
+    function pctClass(value) {
+      if (value < 70) return 'pct-green';
+      if (value < 90) return 'pct-lite';
+      if (value <= 110) return 'pct-white';
+      if (value <= 130) return 'pct-yellow';
+      return 'pct-red';
+    }
+
+    function confidenceLabel(confidence) {
+      if (confidence === 'HIGH') return 'High confidence';
+      if (confidence === 'MEDIUM') return 'Medium confidence';
+      if (confidence === 'LOW') return 'Estimated';
+      return null;
+    }
+
+    // Per the pricing spec (section 6): HIGH/MEDIUM confidence shows the
+    // market price normally; LOW confidence still shows it, but visually
+    // de-emphasized with an "Estimated" badge -- a low-confidence number
+    // shouldn't look as trustworthy as a well-supported one.
+    function renderMarketPriceMetric(group, condPrice) {
+      const isConditioned = Number.isFinite(condPrice);
+      const price = isConditioned ? condPrice
+        : (Number.isFinite(group.marketPrice) ? group.marketPrice : group.medianPrice);
+      if (!Number.isFinite(price)) {
+        return `<span class="metric subtle-block"><strong>—</strong><span class="subtle">Market price</span></span>`;
+      }
+      const label = confidenceLabel(group.confidence);
+      const isLow = group.confidence === 'LOW';
+      const compParts = [];
+      if (!isConditioned && Number.isFinite(group.nSoldFiltered) && group.nSoldFiltered > 0) {
+        compParts.push(`${group.nSoldFiltered} sold`);
+      }
+      if (!isConditioned && Number.isFinite(group.nAskFiltered) && group.nAskFiltered > 0) {
+        compParts.push(`${group.nAskFiltered} asking`);
+      }
+      const compText = compParts.length ? ` · ${compParts.join(', ')}` : '';
+      const priceLabel = isConditioned ? 'Filtered median' : `Market price${label ? ` · ${label}` : ''}${compText}`;
+      return `
+        <span class="metric subtle-block ${isLow && !isConditioned ? 'metric-estimated' : ''}">
+          <strong>$${price.toLocaleString()}</strong>
+          <span class="subtle">${priceLabel}</span>
+        </span>`;
+    }
+
+    function renderRowMedianBadge(row, group) {
+      if (row.medianPct == null) return '<span class="pill pct-white">—</span>';
+      const isLow = group.confidence === 'LOW';
+      return `<span class="pill ${pctClass(row.medianPct)} ${isLow ? 'pill-estimated' : ''}" title="${isLow ? 'Based on an estimated market price (no sold comps yet)' : ''}">${row.medianPct}%</span>`;
+    }
+
+
+    function asciiSlug(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_');
+    }
+
+    function normalizeSetCode(value) {
+      const raw = String(value || '').trim().toLowerCase();
+      const compact = raw.replace(/[^a-z0-9]+/g, '');
+
+      const map = {
+        'base set': 'bs',
+        'baseset': 'bs',
+        'base-set': 'bs',
+        'obsidian flames': 'obsidianflames',
+        'obsidianflames': 'obsidianflames',
+        'paldean fates': 'paldeanfates',
+        'paldeanfates': 'paldeanfates',
+        'brilliant stars': 'brilliantstars',
+        'brilliantstars': 'brilliantstars',
+        'flashfire': 'flashfire',
+        'promo': 'promo',
+        '151': '151'
+      };
+
+      return map[raw] || map[compact] || compact || 'unknown';
+    }
+
+    function normalizeLanguageCode(value) {
+      const raw = String(value || '').toLowerCase().trim();
+      if (raw.includes('japanese') || raw === 'jp' || raw === 'ja') return 'jp';
+      if (raw === 'english' || raw === 'en') return 'en'; // 'English/Unknown' does NOT match
+      return ''; // Unknown/undetected = no suffix
+    }
+
+    function inferSetName(group, row) {
+      return String(
+        row?.debug?.set_guess ||
+        row?.debug?.setguess ||
+        group?.debug?.set_guess ||
+        group?.set_guess ||
+        'Unknown set'
+      ).trim();
+    }
+
+    function inferCardParts(group, row) {
+      const promo = String(
+        row?.debug?.promo_code_guess ||
+        row?.debug?.promocodeguess ||
+        ''
+      ).trim();
+
+      if (promo) {
+        return { display: promo.toUpperCase(), parts: [asciiSlug(promo)] };
+      }
+
+      const raw = String(
+        row?.debug?.card_number_norm ||
+        row?.debug?.cardnumbernorm ||
+        ''
+      ).trim();
+
+      if (raw.includes('/')) {
+        const parts = raw.split('/').map(v => asciiSlug(v)).filter(Boolean);
+        return { display: raw, parts: parts.length ? parts : [] };
+      }
+
+      if (/^\d{4,6}$/.test(raw)) {
+        for (let i = 1; i <= 3; i++) {
+          const left = raw.slice(0, i).replace(/^0+/, '') || '0';
+          const right = raw.slice(i).replace(/^0+/, '') || '0';
+          if (right.length >= 2) {
+            return {
+              display: `${left}/${right}`,
+              parts: [asciiSlug(left), asciiSlug(right)]
+            };
+          }
+        }
+      }
+
+      if (raw) {
+        const cleaned = raw.replace(/^0+/, '') || raw;
+        return { display: cleaned, parts: [asciiSlug(cleaned)] };
+      }
+
+      return { display: '—', parts: [] };
+    }
+
+    function inferGradeState(row) {
+      const company = asciiSlug(
+        row?.debug?.grade_company ||
+        row?.debug?.gradecompany ||
+        ''
+      );
+      const grade = String(
+        row?.debug?.grade_value ||
+        row?.debug?.gradevalue ||
+        ''
+      ).replace(/[^0-9.]/g, '');
+      const compactGrade = grade.replace(/\./g, '');
+
+      if (company && compactGrade) return `${company}${compactGrade}`;
+
+      const condition = String(row?.condition || '').toLowerCase();
+      if (condition.includes('ungraded') || condition.includes('raw')) return 'raw';
+
+      const variant = String(
+        row?.debug?.variant_guess ||
+        row?.debug?.variantguess ||
+        ''
+      ).toLowerCase();
+      if (variant === 'raw') return 'raw';
+
+      if (condition.includes('graded')) return 'graded';
+      return 'raw';
+    }
+
+    function buildDisplayGroupLabel(group) {
+      const firstRow = group?.rows?.[0] || {};
+      const setName = inferSetName(group, firstRow);
+      const card = inferCardParts(group, firstRow).display;
+      // inferGradeState() already distinguishes raw vs. graded (and the specific
+      // grade, e.g. "psa10") for buildDisplayItemId() below -- reuse it here too
+      // so the title suffix can never disagree with how the row is classified.
+      const gradeState = inferGradeState(firstRow);
+      const gradeSuffix = gradeState === 'raw' ? 'Raw' : 'Graded';
+      return `Charizard – ${setName} – ${card} – ${gradeSuffix}`;
+    }
+
+    function buildDisplayItemId(group) {
+      const firstRow = group?.rows?.[0] || {};
+      const setCode = normalizeSetCode(inferSetName(group, firstRow));
+      const cardParts = inferCardParts(group, firstRow).parts;
+      const gradeState = inferGradeState(firstRow);
+      const lang = normalizeLanguageCode(
+        firstRow?.debug?.language_guess ||
+        firstRow?.debug?.languageguess ||
+        ''
+      );
+      return ['pokemon', setCode, 'charizard', ...cardParts, gradeState, lang].filter(Boolean).join('_');
+    }
+
+    function buildDisplayListingId(row) {
+      return String(row?.sourceListingId || row?.id || '');
+    }
+
+    function mergeGroupsByDisplayedItemId(groups) {
+      const merged = new Map();
+
+      for (const group of Array.isArray(groups) ? groups : []) {
+        const rows = Array.isArray(group.rows) ? group.rows : [];
+        if (!rows.length) continue;
+
+        const displayItemId = buildDisplayItemId(group);
+        const displayGroupLabel = buildDisplayGroupLabel(group);
+        const groupKey = displayItemId || group.groupKey || `group_${merged.size + 1}`;
+
+        if (!merged.has(groupKey)) {
+          merged.set(groupKey, {
+            groupKey,
+            groupLabel: displayGroupLabel,
+            itemId: displayItemId,
+            listings: 0,
+            medianPrice: 0,
+            compCount: 0,
+            rows: []
+          });
+        }
+
+        const bucket = merged.get(groupKey);
+        bucket.rows.push(...rows);
+        bucket.groupLabel = displayGroupLabel;
+        bucket.itemId = displayItemId;
+        bucket.listings = bucket.rows.length;
+        bucket.compCount += Number(group.compCount || 0);
+      }
+
+      for (const bucket of merged.values()) {
+        const prices = bucket.rows
+          .map(row => Number(row.price))
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+
+        if (prices.length) {
+          const mid = Math.floor(prices.length / 2);
+          bucket.medianPrice = prices.length % 2
+            ? prices[mid]
+            : (prices[mid - 1] + prices[mid]) / 2;
+        } else {
+          bucket.medianPrice = 0;
+        }
+      }
+
+      return Array.from(merged.values());
+    }
+
+
+    function normalize(text) { return String(text || '').toLowerCase(); }
+
+    function rowMatches(row, term) {
+      const hay = [row.title, row.id, row.seller, row.condition, row.debug.set_guess, row.debug.card_number_norm, row.debug.variant_guess, row.debug.languageguess].map(normalize).join(' | ');
+      return hay.includes(term);
+    }
+
+    // ── Filter Catalog & State ─────────────────────────────────────────────
+    let filterCatalog = new Map();
+    let filterTree = { byPokemon: new Map(), bySet: new Map() };
+
+    const filterState = {
+      collapsed: false,
+      pokemonOpen: false,
+      pokemonFocused: false,
+      setOpen: false,
+      setFocused: false,
+      cardOpen: false,
+      selectedPokemon: new Set(),
+      selectedSets: new Set(),
+      selectedCards: new Set(),
+    };
+
+    // ── Catalog fetch — two separate queries, avoids embedded-resource issues ──
+    async function fetchFilterCatalog() {
+      const [cardsRes, setsRes] = await Promise.all([
+        supabaseClient.from('pokemon_cards')
+          .select('id, pokemon_name, card_number, set_id')
+          .in('pokemon_name', ['charizard', 'charmeleon', 'charmander'])
+          .limit(5000),
+        supabaseClient.from('pokemon_sets')
+          .select('id, set_name, set_key, language')
+          .limit(2000),
+      ]);
+      if (cardsRes.error) { console.warn('Filter catalog cards failed:', cardsRes.error); return []; }
+      if (setsRes.error)  { console.warn('Filter catalog sets failed:',  setsRes.error);  return []; }
+      const setsById = new Map((setsRes.data || []).map(s => [Number(s.id), s]));
+      return (cardsRes.data || []).map(c => ({ ...c, set: setsById.get(Number(c.set_id)) || null }));
+    }
+
+    function buildFilterCatalog(rows) {
+      filterCatalog = new Map();
+      for (const row of rows) {
+        if (!row.set) continue;
+        filterCatalog.set(Number(row.id), {
+          pokemon_name: row.pokemon_name,
+          card_number: row.card_number || '',
+          set_name: row.set.set_name,
+          set_key: row.set.set_key,
+          language: row.set.language,
+        });
+      }
+    }
+
+    function buildFilterTree() {
+      const byPokemon = new Map();
+      const bySet = new Map();
+      for (const [cardId, info] of filterCatalog) {
+        if (!byPokemon.has(info.pokemon_name)) byPokemon.set(info.pokemon_name, new Map());
+        const setsForP = byPokemon.get(info.pokemon_name);
+        if (!setsForP.has(info.set_key)) setsForP.set(info.set_key, { set_name: info.set_name, language: info.language });
+
+        if (!bySet.has(info.set_key)) bySet.set(info.set_key, { set_name: info.set_name, language: info.language, cards: [] });
+        bySet.get(info.set_key).cards.push({ card_id: cardId, card_number: info.card_number, pokemon_name: info.pokemon_name });
+      }
+      filterTree = { byPokemon, bySet };
+    }
+
+    // Pre-computes r.catalogSetKey on each row after catalog loads.
+    // This avoids runtime Map.get() lookups in applyCardFilter, eliminating
+    // any potential type-mismatch between catalog keys and row cardId values.
+    function augmentGroupRows() {
+      for (const g of state.groups)
+        for (const r of g.rows)
+          if (r.cardId) {
+            const info = filterCatalog.get(r.cardId);
+            if (info) r.catalogSetKey = info.set_key;
+          }
+    }
+
+    // ── Filter application — uses pre-computed row fields, no Map lookup ──
+    function applyCardFilter(groups) {
+      if (filterState.selectedCards.size > 0)
+        return groups.filter(g => g.rows.some(r => r.cardId && filterState.selectedCards.has(r.cardId)));
+      if (filterState.selectedSets.size > 0)
+        return groups.filter(g => g.rows.some(r => r.catalogSetKey && filterState.selectedSets.has(r.catalogSetKey)));
+      if (filterState.selectedPokemon.size > 0)
+        return groups.filter(g => g.rows.some(r => r.pokemonName && filterState.selectedPokemon.has(r.pokemonName)));
+      return groups;
+    }
+
+    // ── Render helpers ─────────────────────────────────────────────────────
+    function capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+    function cardSortKey(c) { const n = parseInt(c.card_number, 10); return [isNaN(n) ? 9999 : n, c.card_number]; }
+
+    function renderFilterSidebar() {
+      const sidebar  = document.getElementById('filterSidebar');
+      const btn      = document.getElementById('filterToggleBtn');
+      const clearAll = document.getElementById('filterClearAll');
+      if (filterState.collapsed) {
+        sidebar.classList.add('collapsed'); btn.textContent = '›'; btn.title = 'Expand filters'; return;
+      }
+      sidebar.classList.remove('collapsed'); btn.textContent = '‹'; btn.title = 'Collapse filters';
+      const hasFilter = filterState.selectedPokemon.size > 0 || filterState.selectedSets.size > 0 || filterState.selectedCards.size > 0;
+      clearAll.classList.toggle('hidden', !hasFilter);
+      renderPokemonSection();
+      renderSetSection();
+      renderCardSection();
+    }
+
+    function setSectionOpen(secId, hdId, badgeId, clearBtnId, count, open) {
+      const sec   = document.getElementById(secId);
+      const hd    = document.getElementById(hdId);
+      const badge = document.getElementById(badgeId);
+      sec.classList.toggle('open', open);
+      hd.querySelector('.filter-section-caret').textContent = open ? '▼' : '▶';
+      badge.textContent = count; badge.classList.toggle('hidden', count === 0);
+      hd.classList.toggle('has-sel', count > 0);
+      const clearBtn = document.getElementById(clearBtnId);
+      if (clearBtn) clearBtn.classList.toggle('hidden', count === 0);
+    }
+
+    function renderPokemonSection() {
+      setSectionOpen('filterSecPokemon', 'filterHdPokemon', 'filterBadgePokemon', 'filterClearPokemon', filterState.selectedPokemon.size, filterState.pokemonOpen);
+      if (!filterState.pokemonOpen) return;
+      const all = [...filterTree.byPokemon.keys()].sort();
+      let html = '';
+      if (filterState.pokemonFocused && filterState.selectedPokemon.size > 0) {
+        for (const p of [...filterState.selectedPokemon].sort())
+          html += `<button class="filter-item selected" data-action="pick-pokemon" data-val="${p}">${capFirst(p)}</button>`;
+        html += `<button class="filter-clear-btn" data-action="pokemon-show-all">+ Show all Pokémon</button>`;
+      } else {
+        if (filterState.selectedPokemon.size > 0) html += `<button class="filter-clear-btn" data-action="clear-pokemon">Clear</button>`;
+        for (const p of all) {
+          const sel = filterState.selectedPokemon.has(p);
+          html += `<button class="filter-item${sel ? ' selected' : ''}" data-action="pick-pokemon" data-val="${p}">${capFirst(p)}</button>`;
+        }
+      }
+      document.getElementById('filterBodyPokemon').innerHTML = html;
+    }
+
+    function renderSetSection() {
+      let availSets;
+      if (filterState.selectedPokemon.size > 0) {
+        availSets = new Map();
+        for (const p of filterState.selectedPokemon) {
+          const setsForP = filterTree.byPokemon.get(p);
+          if (setsForP) for (const [sk, si] of setsForP) if (!availSets.has(sk)) availSets.set(sk, si);
+        }
+      } else { availSets = filterTree.bySet; }
+      const sorted = [...availSets.entries()].sort((a,b) => a[1].set_name.localeCompare(b[1].set_name));
+      setSectionOpen('filterSecSet', 'filterHdSet', 'filterBadgeSet', 'filterClearSet', filterState.selectedSets.size, filterState.setOpen);
+      if (!filterState.setOpen) return;
+      let html = '';
+      if (filterState.setFocused && filterState.selectedSets.size > 0) {
+        for (const sk of [...filterState.selectedSets].sort()) {
+          const si = availSets.get(sk) || filterTree.bySet.get(sk);
+          if (!si) continue;
+          const lang = si.language === 'ja' ? ' (JP)' : '';
+          html += `<button class="filter-item selected" data-action="pick-set" data-val="${sk}">${si.set_name}${lang}</button>`;
+        }
+        html += `<button class="filter-clear-btn" data-action="set-show-all">+ Show all Sets</button>`;
+      } else {
+        if (filterState.selectedSets.size > 0) html += `<button class="filter-clear-btn" data-action="clear-sets">Clear</button>`;
+        for (const [sk, si] of sorted) {
+          const sel = filterState.selectedSets.has(sk);
+          const lang = si.language === 'ja' ? ' (JP)' : '';
+          html += `<button class="filter-item${sel ? ' selected' : ''}" data-action="pick-set" data-val="${sk}">${si.set_name}${lang}</button>`;
+        }
+      }
+      document.getElementById('filterBodySet').innerHTML = html;
+    }
+
+    function renderCardSection() {
+      const secEl = document.getElementById('filterSecCard');
+      const divEl = document.getElementById('filterDivCard');
+      const hasSets = filterState.selectedSets.size > 0;
+      secEl.style.display = hasSets ? '' : 'none';
+      divEl.style.display  = hasSets ? '' : 'none';
+      if (!hasSets) return;
+      setSectionOpen('filterSecCard', 'filterHdCard', 'filterBadgeCard', 'filterClearCard', filterState.selectedCards.size, filterState.cardOpen);
+      if (!filterState.cardOpen) return;
+      const cards = [];
+      const seen = new Set();
+      for (const sk of filterState.selectedSets) {
+        const si = filterTree.bySet.get(sk);
+        if (!si) continue;
+        for (const c of si.cards) {
+          if (filterState.selectedPokemon.size > 0 && !filterState.selectedPokemon.has(c.pokemon_name)) continue;
+          if (!seen.has(c.card_id)) { seen.add(c.card_id); cards.push(c); }
+        }
+      }
+      cards.sort((a,b) => { const [an,as]=cardSortKey(a),[bn,bs]=cardSortKey(b); return an!==bn?an-bn:as.localeCompare(bs); });
+      const onePokemon = filterState.selectedPokemon.size === 1;
+      let html = filterState.selectedCards.size > 0 ? `<button class="filter-clear-btn" data-action="clear-cards">Clear</button>` : '';
+      for (const c of cards) {
+        const sel = filterState.selectedCards.has(c.card_id);
+        const lbl = onePokemon ? `#${c.card_number}` : `${capFirst(c.pokemon_name)} #${c.card_number}`;
+        html += `<button class="filter-item${sel ? ' selected' : ''}" data-action="pick-card" data-val="${c.card_id}">${lbl}</button>`;
+      }
+      document.getElementById('filterBodyCard').innerHTML = html;
+    }
+
+    // ── Pick actions ───────────────────────────────────────────────────────
+    function filterPickPokemon(name) {
+      if (filterState.selectedPokemon.has(name)) {
+        filterState.selectedPokemon.delete(name);
+        if (filterState.selectedPokemon.size === 0) { filterState.pokemonFocused = false; filterState.setOpen = false; }
+      } else {
+        filterState.selectedPokemon.add(name);
+        filterState.pokemonFocused = true;
+        filterState.setOpen = true;
+        filterState.setFocused = false;
+      }
+      filterState.selectedSets.clear(); filterState.selectedCards.clear(); filterState.cardOpen = false;
+    }
+
+    function filterPickSet(key) {
+      if (filterState.selectedSets.has(key)) {
+        filterState.selectedSets.delete(key);
+        if (filterState.selectedSets.size === 0) { filterState.setFocused = false; filterState.cardOpen = false; }
+      } else {
+        filterState.selectedSets.add(key);
+        filterState.setFocused = true;
+        filterState.cardOpen = true;
+      }
+      filterState.selectedCards.clear();
+    }
+
+    // ── Event listeners ────────────────────────────────────────────────────
+    document.getElementById('filterClearAll').addEventListener('click', () => {
+      // Clear all selections AND collapse all sections
+      filterState.selectedPokemon.clear(); filterState.pokemonFocused = false; filterState.pokemonOpen = false;
+      filterState.selectedSets.clear(); filterState.setFocused = false; filterState.setOpen = false;
+      filterState.selectedCards.clear(); filterState.cardOpen = false;
+      renderFilterSidebar(); applySearch();
+    });
+    document.getElementById('filterToggleBtn').addEventListener('click', () => {
+      filterState.collapsed = !filterState.collapsed; renderFilterSidebar();
+    });
+    document.getElementById('filterHdPokemon').addEventListener('click', () => {
+      filterState.pokemonOpen = !filterState.pokemonOpen;
+      if (!filterState.pokemonOpen && filterState.selectedPokemon.size === 0) filterState.setOpen = false;
+      renderFilterSidebar();
+    });
+    document.getElementById('filterHdSet').addEventListener('click', () => {
+      filterState.setOpen = !filterState.setOpen; renderFilterSidebar();
+    });
+    document.getElementById('filterHdCard').addEventListener('click', () => {
+      filterState.cardOpen = !filterState.cardOpen; renderFilterSidebar();
+    });
+
+    document.getElementById('filterClearPokemon').addEventListener('click', () => {
+      filterState.selectedPokemon.clear(); filterState.pokemonFocused = false;
+      filterState.selectedSets.clear(); filterState.setFocused = false; filterState.setOpen = false;
+      filterState.selectedCards.clear(); filterState.cardOpen = false;
+      renderFilterSidebar(); applySearch();
+    });
+    document.getElementById('filterClearSet').addEventListener('click', () => {
+      filterState.selectedSets.clear(); filterState.setFocused = false;
+      filterState.selectedCards.clear(); filterState.cardOpen = false;
+      renderFilterSidebar(); applySearch();
+    });
+    document.getElementById('filterClearCard').addEventListener('click', () => {
+      filterState.selectedCards.clear();
+      renderFilterSidebar(); applySearch();
+    });
+
+    document.getElementById('filterBody').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const { action, val } = btn.dataset;
+      switch (action) {
+        case 'pick-pokemon': filterPickPokemon(val); break;
+        case 'pick-set': filterPickSet(val); break;
+        case 'pick-card': {
+          const id = Number(val);
+          filterState.selectedCards.has(id) ? filterState.selectedCards.delete(id) : filterState.selectedCards.add(id);
+          break;
+        }
+        case 'clear-pokemon':
+          filterState.selectedPokemon.clear(); filterState.pokemonFocused = false;
+          filterState.selectedSets.clear(); filterState.setFocused = false; filterState.setOpen = false;
+          filterState.selectedCards.clear(); filterState.cardOpen = false;
+          break;
+        case 'clear-sets':
+          filterState.selectedSets.clear(); filterState.setFocused = false;
+          filterState.selectedCards.clear(); filterState.cardOpen = false;
+          break;
+        case 'clear-cards': filterState.selectedCards.clear(); break;
+        case 'pokemon-show-all': filterState.pokemonFocused = false; break;
+        case 'set-show-all':    filterState.setFocused = false;    break;
+      }
+      renderFilterSidebar(); applySearch();
+    });
+
+    // ── End filter code ────────────────────────────────────────────────────
+
+    // ── Price History Chart ───────────────────────────────────────────────
+
+    const priceHistoryCache = new Map();
+
+    async function fetchPriceHistory(key) {
+      if (priceHistoryCache.has(key)) return priceHistoryCache.get(key);
+
+      const { data, error } = await supabaseClient
+        .from('sold_comps')
+        .select('sold_at, sold_price_value')
+        .eq('normalized_item_key', key)
+        .eq('is_valid_comp', true)
+        .order('sold_at', { ascending: true });
+
+      if (error) { console.warn('Price history fetch failed:', error); return []; }
+
+      const rows = (data || [])
+        .map(r => ({ date: new Date(r.sold_at), price: Number(r.sold_price_value) }))
+        .filter(r => Number.isFinite(r.price) && r.price > 0);
+
+      priceHistoryCache.set(key, rows);
+      return rows;
+    }
+
+    function medianOf(nums) {
+      if (!nums.length) return null;
+      const sorted = [...nums].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    function weeklyBuckets(points) {
+      if (!points.length) return [];
+      const byWeek = new Map();
+      for (const p of points) {
+        const d = new Date(p.date);
+        const dow = d.getDay(); // 0=Sun
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - dow);
+        weekStart.setHours(0, 0, 0, 0);
+        const k = weekStart.getTime();
+        if (!byWeek.has(k)) byWeek.set(k, { weekStart, prices: [] });
+        byWeek.get(k).prices.push(p.price);
+      }
+      return [...byWeek.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, w]) => ({ date: w.weekStart, price: medianOf(w.prices) }));
+    }
+
+    function niceAxisPrice(p) {
+      if (p >= 1000) return `$${(p / 1000).toFixed(p % 1000 === 0 ? 0 : 1)}k`;
+      if (p >= 100) return `$${Math.round(p)}`;
+      return `$${p % 1 === 0 ? p : p.toFixed(0)}`;
+    }
+
+    function renderPriceChart(points) {
+      const bodyEl = document.getElementById('priceChartBody');
+      const metaEl = document.getElementById('priceChartMeta');
+      if (!bodyEl) return;
+
+      if (!points.length) {
+        metaEl.textContent = '';
+        bodyEl.innerHTML = '<div class="price-chart-msg">No sold comp history for this card.</div>';
+        return;
+      }
+
+      const prices = points.map(p => p.price);
+      const n = prices.length;
+      const overallMedian = medianOf(prices);
+      const minDate = points[0].date;
+      const maxDate = points[points.length - 1].date;
+      const dateRangeMs = Math.max(maxDate - minDate, 1);
+
+      // Y range: 5th–95th percentile with padding, handles outliers
+      const sorted = [...prices].sort((a, b) => a - b);
+      const p5  = sorted[Math.max(0, Math.floor(n * 0.05))];
+      const p95 = sorted[Math.min(n - 1, Math.floor(n * 0.95))];
+      const spread = Math.max(p95 - p5, 1);
+      const yMin = Math.max(0, p5 - spread * 0.15);
+      const yMax = p95 + spread * 0.15;
+      const yRange = yMax - yMin;
+
+      // Layout
+      const SVG_W = 258, SVG_H = 154;
+      const M = { top: 6, right: 6, bottom: 20, left: 40 };
+      const PW = SVG_W - M.left - M.right; // 212
+      const PH = SVG_H - M.top - M.bottom; // 128
+
+      const xOf = d => M.left + ((d - minDate) / dateRangeMs) * PW;
+      const yOf = p => {
+        const clamped = Math.max(yMin, Math.min(yMax, p));
+        return M.top + PH - ((clamped - yMin) / yRange) * PH;
+      };
+
+      // ── Gridlines (4 horizontal) ──
+      const yTicks = [0, 1, 2, 3].map(i => {
+        const price = yMin + (yRange * i) / 3;
+        return { price, y: yOf(price) };
+      });
+      const gridSvg = yTicks.map(t =>
+        `<line x1="${M.left}" y1="${t.y.toFixed(1)}" x2="${M.left + PW}" y2="${t.y.toFixed(1)}" stroke="var(--color-border)" stroke-width="0.75"/>`
+      ).join('');
+      const yLabelSvg = yTicks.map(t =>
+        `<text x="${M.left - 3}" y="${t.y.toFixed(1)}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="var(--color-text-faint)" font-family="'Satoshi',system-ui,sans-serif">${niceAxisPrice(t.price)}</text>`
+      ).join('');
+
+      // ── X-axis monthly labels ──
+      const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const xTickCursor = new Date(minDate);
+      xTickCursor.setDate(1); xTickCursor.setHours(0, 0, 0, 0);
+      if (xTickCursor < minDate) xTickCursor.setMonth(xTickCursor.getMonth() + 1);
+      const xLabelSvg = [];
+      while (xTickCursor <= maxDate) {
+        const x = xOf(xTickCursor);
+        if (x >= M.left + 6 && x <= M.left + PW - 6) {
+          xLabelSvg.push(`<text x="${x.toFixed(1)}" y="${(M.top + PH + 13).toFixed(1)}" text-anchor="middle" font-size="8" fill="var(--color-text-faint)" font-family="'Satoshi',system-ui,sans-serif">${MONTH_SHORT[xTickCursor.getMonth()]}</text>`);
+        }
+        xTickCursor.setMonth(xTickCursor.getMonth() + 1);
+      }
+
+      // ── Weekly trend line + area fill ──
+      const weeks = weeklyBuckets(points);
+      const validWeeks = weeks.filter(w => w.price >= yMin * 0.6 && w.price <= yMax * 1.5);
+      let areaSvg = '', lineSvg = '';
+      if (validWeeks.length >= 3) {
+        const lineCoords = validWeeks.map(w => `${xOf(w.date).toFixed(1)},${yOf(w.price).toFixed(1)}`);
+        const lastX = xOf(validWeeks[validWeeks.length - 1].date).toFixed(1);
+        const firstX = xOf(validWeeks[0].date).toFixed(1);
+        const baseY = (M.top + PH).toFixed(1);
+        areaSvg = `<polygon points="${lineCoords.join(' ')} ${lastX},${baseY} ${firstX},${baseY}" fill="url(#priceGrad)" opacity="0.28"/>`;
+        lineSvg = `<polyline points="${lineCoords.join(' ')}" fill="none" stroke="var(--color-primary)" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
+
+      // ── Sale dots ──
+      const dotsSvg = points.map(p => {
+        const x = xOf(p.date);
+        const isOutlier = p.price < yMin || p.price > yMax;
+        const y = isOutlier
+          ? (p.price < yMin ? M.top + PH : M.top)
+          : yOf(p.price);
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2" fill="var(--color-primary)" opacity="${isOutlier ? 0.15 : 0.45}"/>`;
+      }).join('');
+
+      // ── Median reference line ──
+      const medY = yOf(overallMedian).toFixed(1);
+      const medLineSvg = `<line x1="${M.left}" y1="${medY}" x2="${M.left + PW}" y2="${medY}" stroke="var(--color-primary)" stroke-width="0.75" stroke-dasharray="3 3" opacity="0.4"/>`;
+
+      // ── Axes ──
+      const axesSvg = `
+        <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + PH}" stroke="var(--color-border-strong)" stroke-width="1"/>
+        <line x1="${M.left}" y1="${M.top + PH}" x2="${M.left + PW}" y2="${M.top + PH}" stroke="var(--color-border-strong)" stroke-width="1"/>`;
+
+      // ── Outlier badge ──
+      const nOutliers = prices.filter(p => p < yMin || p > yMax).length;
+      const outlierNote = nOutliers > 0
+        ? `<text x="${M.left + PW}" y="${M.top + 4}" text-anchor="end" font-size="7.5" fill="var(--color-text-faint)" font-family="'Satoshi',system-ui,sans-serif">${nOutliers} outlier${nOutliers > 1 ? 's' : ''} hidden</text>`
+        : '';
+
+      // Meta line
+      const oldestMonth = MONTH_SHORT[minDate.getMonth()];
+      const oldestYear = minDate.getFullYear();
+      metaEl.textContent = `${n} sales · med. ${formatPrice(overallMedian)} · since ${oldestMonth} ${oldestYear}`;
+
+      bodyEl.innerHTML = `
+        <div class="price-chart-wrap">
+          <svg viewBox="0 0 ${SVG_W} ${SVG_H}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;flex:1;min-height:0;overflow:visible;" aria-label="Price history chart">
+            <defs>
+              <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" style="stop-color:var(--color-primary);stop-opacity:0.6"/>
+                <stop offset="100%" style="stop-color:var(--color-primary);stop-opacity:0"/>
+              </linearGradient>
+            </defs>
+            <rect x="${M.left}" y="${M.top}" width="${PW}" height="${PH}" fill="var(--color-bg)" rx="1"/>
+            ${gridSvg}
+            ${medLineSvg}
+            ${areaSvg}
+            ${dotsSvg}
+            ${lineSvg}
+            ${axesSvg}
+            ${yLabelSvg}
+            ${xLabelSvg.join('')}
+            ${outlierNote}
+          </svg>
+        </div>`;
+    }
+
+    async function loadPriceHistory(key, label) {
+      const bodyEl = document.getElementById('priceChartBody');
+      const metaEl = document.getElementById('priceChartMeta');
+      const headEl = document.querySelector('#priceHistoryCard h2');
+      if (!bodyEl) return;
+
+      // Update header with the card group name
+      if (headEl) {
+        if (label) {
+          const short = label.replace(/^Charizard\s*[–-]\s*/i, '');
+          headEl.textContent = short.length > 36 ? short.slice(0, 34) + '…' : short;
+        } else {
+          headEl.textContent = 'Price history';
+        }
+      }
+
+      // Mark the matching group header as chart-active, clear others
+      document.querySelectorAll('.group-summary.chart-active').forEach(el => el.classList.remove('chart-active'));
+      const activeBtn = document.querySelector(`[data-toggle-group="${CSS.escape(key)}"]`);
+      if (activeBtn) activeBtn.classList.add('chart-active');
+
+      if (!key) {
+        metaEl.textContent = '';
+        bodyEl.innerHTML = '<div class="price-chart-msg">No normalized key for this group.</div>';
+        return;
+      }
+
+      // Show loading only if not already cached
+      if (!priceHistoryCache.has(key)) {
+        metaEl.textContent = '';
+        bodyEl.innerHTML = '<div class="price-chart-msg">Loading…</div>';
+      }
+
+      const points = await fetchPriceHistory(key);
+      renderPriceChart(points);
+
+      // Scroll the chart card into view in the detail pane if it's out of sight
+      const card = document.getElementById('priceHistoryCard');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── End price history chart code ──────────────────────────────────────
+
+    // ── Analytics Panel ───────────────────────────────────────────────────
+
+    // Turns a normalized_item_key into a short human-readable label for the chart.
+    // E.g. "charizard_bs_4_102_raw" → "BS 4/102 · Raw"
+    //      "charizard_prsw_swsh262_psa_10" → "PRSW swsh262 · PSA 10"
+    function formatStatsKey(key) {
+      let s = key.replace(/^charizard_/, '');
+      let gradeSuffix = '';
+
+      // Detect grade company + value suffix (e.g. _psa_10, _bgs_9, _cgc_10, _sgc_9)
+      const gradeMatch = s.match(/_(psa|bgs|cgc|beckett|sgc|ags|ace)_?(\d+(?:_5)?)?$/i);
+      if (gradeMatch) {
+        s = s.slice(0, -gradeMatch[0].length);
+        const co = gradeMatch[1].toUpperCase();
+        const gr = (gradeMatch[2] || '').replace('_', '.');
+        gradeSuffix = ` · ${co}${gr ? ' ' + gr : ''}`;
+      } else if (s.endsWith('_raw')) {
+        s = s.slice(0, -4);
+        gradeSuffix = ' · Raw';
+      } else if (s.endsWith('_graded')) {
+        s = s.slice(0, -7);
+        gradeSuffix = ' · Graded';
+      }
+
+      const parts = s.split('_');
+      const setCode = (parts[0] || '').toUpperCase();
+      const cardParts = parts.slice(1).join('/');
+      const label = cardParts ? `${setCode} ${cardParts}${gradeSuffix}` : `${setCode}${gradeSuffix}`;
+      return label.length > 28 ? label.slice(0, 26) + '…' : label;
+    }
+
+    function renderAnalytics() {
+      const panel = document.getElementById('analyticsPanel');
+      const btn   = document.getElementById('analyticsBtn');
+      if (!panel) return;
+
+      // Sync button appearance
+      if (btn) {
+        btn.classList.toggle('analytics-btn-active', state.analyticsVisible);
+      }
+
+      if (!state.analyticsVisible) {
+        panel.style.display = 'none';
+        return;
+      }
+
+      if (!allStatsRows.length) {
+        // Data not yet loaded — show placeholder
+        panel.style.display = '';
+        panel.querySelector('.analytics-inner').innerHTML =
+          '<div class="subtle" style="padding:.5rem 0;">Loading analytics…</div>';
+        return;
+      }
+
+      panel.style.display = '';
+
+      // ── Summary tiles ──
+      const totalCards   = allStatsRows.length;
+      const totalSold    = allStatsRows.reduce((s, r) => s + (Number(r.n_sold_filtered) || 0), 0);
+      const totalAsk     = allStatsRows.reduce((s, r) => s + (Number(r.n_ask_filtered)  || 0), 0);
+      const highConf     = allStatsRows.filter(r => (r.confidence || '').toUpperCase() === 'HIGH').length;
+      const medConf      = allStatsRows.filter(r => (r.confidence || '').toUpperCase() === 'MEDIUM').length;
+
+      document.getElementById('analyticsTiles').innerHTML = `
+        <div class="analytics-tile">
+          <strong>${totalCards}</strong>
+          <span>Cards tracked</span>
+        </div>
+        <div class="analytics-tile">
+          <strong>${totalSold.toLocaleString()}</strong>
+          <span>Sold comps</span>
+        </div>
+        <div class="analytics-tile">
+          <strong>${totalAsk.toLocaleString()}</strong>
+          <span>Ask listings</span>
+        </div>
+        <div class="analytics-tile" style="border-color:var(--color-primary);">
+          <strong style="color:var(--color-primary);">${highConf}</strong>
+          <span>High conf.</span>
+        </div>
+        <div class="analytics-tile">
+          <strong style="color:var(--color-yellow);">${medConf}</strong>
+          <span>Med. conf.</span>
+        </div>
+      `;
+
+      // ── Bar chart — top 12 by sold + ask activity ──
+      const top = [...allStatsRows]
+        .map(r => ({
+          key: r.normalized_item_key,
+          sold: Number(r.n_sold_filtered) || 0,
+          ask:  Number(r.n_ask_filtered)  || 0,
+          median: Number(r.median_price)  || 0,
+        }))
+        .filter(r => r.sold + r.ask > 0)
+        .sort((a, b) => (b.sold + b.ask) - (a.sold + a.ask))
+        .slice(0, 12);
+
+      const chartEl = document.getElementById('analyticsChart');
+      if (!top.length) {
+        chartEl.innerHTML = '<div class="subtle" style="padding:.5rem 0;">No activity data yet.</div>';
+        return;
+      }
+
+      const maxVal  = Math.max(...top.map(r => r.sold + r.ask));
+      const BAR_H   = 20;
+      const GAP     = 5;
+      const LABEL_W = 158; // px allocated for label text
+      const BAR_AREA = 400; // max bar width in viewBox units
+      const svgW    = LABEL_W + BAR_AREA + 70; // 70 for right-side count label
+      const chartH  = top.length * (BAR_H + GAP) - GAP;
+
+      const bars = top.map((r, i) => {
+        const label  = formatStatsKey(r.key);
+        const total  = r.sold + r.ask;
+        const soldW  = maxVal > 0 ? Math.round((r.sold / maxVal) * BAR_AREA) : 0;
+        const askW   = maxVal > 0 ? Math.round((r.ask  / maxVal) * BAR_AREA) : 0;
+        const y      = i * (BAR_H + GAP);
+        const countLabel = r.sold > 0 && r.ask > 0
+          ? `${r.sold}s ${r.ask}a`
+          : r.sold > 0 ? `${r.sold}s` : `${r.ask}a`;
+        return `
+          <g transform="translate(0,${y})">
+            <text x="${LABEL_W - 6}" y="${BAR_H / 2}" text-anchor="end"
+              dominant-baseline="middle" font-size="10.5" fill="var(--color-text-muted)"
+              font-family="'Satoshi',system-ui,sans-serif">${label}</text>
+            ${soldW > 0 ? `<rect x="${LABEL_W}" y="2" width="${soldW}" height="${BAR_H - 4}" fill="var(--color-primary)" rx="2"/>` : ''}
+            ${askW  > 0 ? `<rect x="${LABEL_W + soldW}" y="2" width="${askW}" height="${BAR_H - 4}" fill="var(--color-border-strong)" rx="2"/>` : ''}
+            <text x="${LABEL_W + soldW + askW + 5}" y="${BAR_H / 2}" dominant-baseline="middle"
+              font-size="10" fill="var(--color-text-faint)"
+              font-family="'Satoshi',system-ui,sans-serif">${countLabel}</text>
+          </g>`;
+      }).join('');
+
+      chartEl.innerHTML = `
+        <svg viewBox="0 0 ${svgW} ${chartH}" width="100%" height="${chartH}"
+          style="display:block;overflow:visible;" role="img" aria-label="Top cards by market activity">
+          ${bars}
+        </svg>`;
+    }
+
+    // ── End analytics panel code ───────────────────────────────────────────
+
+    // Session #42 — Priority #2 fix: moved search + filter logic server-side so
+    // it sees every active listing, not just the single placeholder row pre-loaded
+    // for each group. Calls the search_active_listings() RPC, which queries
+    // market_listings directly and returns the set of matching app_group_keys.
+    // Falls back to the old client-side approach if the RPC fails, so the page
+    // stays usable even if the migration hasn't been applied yet.
+    async function applySearch() {
+      const term            = normalize(els.searchInput.value.trim());
+      const hasCardFilter   = filterState.selectedCards.size   > 0;
+      const hasSetFilter    = filterState.selectedSets.size    > 0;
+      const hasPokemonFilter = filterState.selectedPokemon.size > 0;
+      const hasAnyFilter    = hasCardFilter || hasSetFilter || hasPokemonFilter || !!term;
+
+      // Nothing active — show everything with no round-trip needed.
+      if (!hasAnyFilter) {
+        state.filtered = state.groups;
+        render({ collapseAll: true });
+        return;
+      }
+
+      try {
+        const { data, error } = await supabaseClient.rpc('search_active_listings', {
+          p_term:          term || null,
+          p_pokemon_names: hasPokemonFilter ? [...filterState.selectedPokemon] : null,
+          p_set_keys:      hasSetFilter     ? [...filterState.selectedSets]    : null,
+          p_card_ids:      hasCardFilter    ? [...filterState.selectedCards]   : null,
+        });
+        if (error) throw error;
+        const matchingKeys = new Set(data || []);
+        state.filtered = state.groups.filter(g => matchingKeys.has(g.groupKey));
+      } catch (err) {
+        console.error('search_active_listings RPC failed — falling back to client-side filter (blind to unloaded rows):', err);
+        // Graceful fallback: old client-side behaviour, only sees loaded rows.
+        const base = applyCardFilter(state.groups);
+        state.filtered = base
+          .map(group => ({ ...group, rows: group.rows.filter(row => !term || rowMatches(row, term) || normalize(group.groupLabel).includes(term)) }))
+          .filter(group => group.rows.length > 0);
+      }
+      render({ collapseAll: true });
+    }
+
+    // Keys that control group ordering, not row ordering within a group.
+    // When one of these is active, rows within each expanded group always
+    // fall back to price ascending — the group sort direction should never
+    // bleed into the within-group row sort direction.
+    const GROUP_SORT_KEYS = new Set(['listings', 'groupprice', 'groupmarket']);
+
+    function getSortedRows(rows) {
+      const isGroupSort = GROUP_SORT_KEYS.has(state.sortKey);
+      const rowKey = isGroupSort ? 'price' : state.sortKey;
+      const dir = isGroupSort ? 1 : (state.sortDir === 'asc' ? 1 : -1);
+      return [...rows].sort((a, b) => {
+        const av = rowKey === 'price' ? a.price : rowKey === 'median' ? a.medianPct : rowKey === 'seller' ? a.seller : rowKey === 'qty' ? a.qty : rowKey === 'id' ? a.id : a.title;
+        const bv = rowKey === 'price' ? b.price : rowKey === 'median' ? b.medianPct : rowKey === 'seller' ? b.seller : rowKey === 'qty' ? b.qty : rowKey === 'id' ? b.id : b.title;
+        if (rowKey === 'price' || rowKey === 'median') {
+          // Missing values sort to the end, regardless of sort direction --
+          // a "missing price" row shouldn't jump to the top just because
+          // someone clicked "sort descending".
+          const aMissing = !Number.isFinite(av);
+          const bMissing = !Number.isFinite(bv);
+          if (aMissing && bMissing) return 0;
+          if (aMissing) return 1;
+          if (bMissing) return -1;
+        }
+        if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+
+    function currentVisibleRows() {
+      return state.filtered.flatMap(group => getConditionFilteredRows(getSortedRows(group.rows)));
+    }
+
+    function selectedRowIndex() {
+      if (!state.selected) return -1;
+      return currentVisibleRows().findIndex(row => row.id === state.selected.id);
+    }
+
+    function selectRelativeRow(delta) {
+      const rows = currentVisibleRows();
+      if (!rows.length) return;
+      const current = selectedRowIndex();
+      const nextIndex = current < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, current + delta));
+      const nextRow = rows[nextIndex];
+      if (!nextRow) return;
+      setSelected(nextRow);
+      render();
+      const rowEl = document.querySelector(`[data-row-id="${nextRow.id}"]`);
+    }
+
+    function setSelected(row) {
+      state.selected = row;
+      els.selectionMeta.innerHTML = `<strong>${row.title}</strong><span>${row.seller} · $${row.price.toLocaleString()} · ${row.medianPct}% of median</span>`;
+      els.selectedSummary.innerHTML = `<strong style="display:block;margin-bottom:.5rem;">${row.title}</strong><div class="subtle">Seller: ${row.seller}<br>ID: ${buildDisplayListingId(row)}<br>Condition: ${row.condition}<br>Qty: ${row.qty}<br>Price: $${row.price.toLocaleString()}${row.firstSeenAt ? `<br>Listed: ${formatDateListed(row.firstSeenAt)}` : ''}</div>`;
+
+      // ── Item specifics — 4 resolved fields, always shown ──
+      const d = row.debug;
+      const pokemonDisplay = row.pokemonName ? row.pokemonName.charAt(0).toUpperCase() + row.pokemonName.slice(1) : '—';
+      const specificsHtml = [
+        `<dt>Pok\u00e9mon</dt><dd>${pokemonDisplay}</dd>`,
+        `<dt>Set</dt><dd>${d.setguess || '—'}</dd>`,
+        `<dt>Card #</dt><dd>${d.displayidentity || '—'}</dd>`,
+        `<dt>Language</dt><dd>${(function(v){const r=String(v||'').toLowerCase().trim();if(r.includes('japanese')||r==='jp'||r==='ja')return'Japanese';if(r==='english'||r==='en')return'English';return'—';})(d.languageguess)}</dd>`,
+      ].join('');
+
+      // ── Debug fields — raw parser internals, shown only when debugVisible ──
+      const debugHtml = state.debugVisible
+        ? `<dt style="color:var(--color-text-faint);margin-top:var(--space-2);grid-column:1/-1;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;padding-top:var(--space-1);border-top:1px solid var(--color-border);">Debug</dt><dd></dd>` + [
+            ['Matched key',    d.matchedcardid     || '—'],
+            ['Norm. key',      d.normalizeditemkey || '—'],
+            ['Item ID',        d.normalizeditemid  || '—'],
+            ['Card # norm',    d.cardnumbernorm    || '—'],
+            ['Card # raw',     d.cardnumberguess   || '—'],
+            ['Promo code',     d.promocodeguess    || '—'],
+            ['Identity status',d.identitystatus    || '—'],
+            ['Parsed title',   d.parsedtitle       || '—'],
+          ].map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
+        : '';
+
+      els.debugPanel.innerHTML = specificsHtml + debugHtml;
+
+      els.buyLink.href = row.url || '#';
+      els.buyLink.style.opacity = '1';
+      els.buyLink.style.pointerEvents = 'auto';
+      // Inline image viewer
+      state.detailImageIndex = 0;
+      updateDetailImage();
+      // Load price history for this row's card group
+      const rowGroup = state.filtered.find(g => g.rows.some(r => r.id === row.id))
+                    || state.groups.find(g => g.rows.some(r => r.id === row.id));
+      if (rowGroup) loadPriceHistory(rowGroup.groupKey, rowGroup.groupLabel);
+    }
+
+    function updateDetailImage() {
+      const images = state.selected?.images || [];
+      if (!images.length) {
+        els.detailImageCard.style.display = 'none';
+        return;
+      }
+      els.detailImageCard.style.display = '';
+      const idx = state.detailImageIndex;
+      els.detailImage.src = images[idx];
+      els.detailImageCount.textContent = `Image ${idx + 1} of ${images.length}`;
+      els.detailPrevImg.disabled = idx === 0;
+      els.detailNextImg.disabled = idx === images.length - 1;
+    }
+
+    function openModal(images, title) {
+      if (!images?.length) return;
+      state.modalImages = images;
+      state.modalIndex = 0;
+      els.modalTitle.textContent = title;
+      updateModal();
+      els.imageModal.classList.add('open');
+      els.imageModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function updateModal() {
+      const img = state.modalImages[state.modalIndex];
+      els.modalImage.src = img;
+      const idx = selectedRowIndex();
+      const totalRows = currentVisibleRows().length;
+      const rowLabel = idx >= 0 ? ` · Listing ${idx + 1} of ${totalRows}` : '';
+      els.modalCount.textContent = `Image ${state.modalIndex + 1} of ${state.modalImages.length}${rowLabel}`;
+    }
+
+    function closeModal() {
+      els.imageModal.classList.remove('open');
+      els.imageModal.setAttribute('aria-hidden', 'true');
+    }
+
+    // ── Condition filter ──────────────────────────────────────────────────
+
+    function getConditionFilteredRows(rows) {
+      const { type, sub } = state.conditionFilter;
+      if (type === 'all') return rows;
+      const base = type === 'graded' ? rows.filter(r => r.isGraded) : rows.filter(r => !r.isGraded);
+      if (!sub) return base;
+      if (type === 'graded') return base.filter(r => r.gradeValue != null && String(r.gradeValue) === String(sub));
+      if (type === 'raw')    return base.filter(r => r.rawCondition === sub);
+      return base;
+    }
+
+    // Top-level type filter: is this group Raw vs Graded?
+    // Graded groups have grade-company patterns in their key.
+    // Everything else (including _raw and ambiguous _misc/_unresolved) is treated as Raw
+    // when the Raw filter is active — exclude only what is DEFINITELY graded.
+    function groupMatchesConditionType(group) {
+      const { type } = state.conditionFilter;
+      if (type === 'all') return true;
+      const key = String(group.groupKey || '').toLowerCase();
+      const isDefinitelyGraded = /_(psa|cgc|bgs|sgc|ace|tag|tcc)_?\d/.test(key) || key.endsWith('_graded');
+      if (type === 'graded') return isDefinitelyGraded;
+      if (type === 'raw')    return !isDefinitelyGraded; // include _raw, _misc, _unresolved, etc.
+      return true;
+    }
+
+    // Sub-condition filter: does this group have at least one listing matching the sub (NM/grade#)?
+    // Uses the condition index when available; falls back to loaded rows.
+    // Errs on the side of INCLUSION when uncertain — groups are only excluded when
+    // we have positive evidence they don't contain the requested condition.
+    function groupMatchesSubCondition(group) {
+      const { type, sub } = state.conditionFilter;
+      if (!sub) return true;
+
+      const idx = conditionIndex.get(group.groupKey);
+
+      if (type === 'graded') {
+        if (idx && idx.gradeValues.length > 0) {
+          return idx.gradeValues.some(v => String(v) === String(sub));
+        }
+        // No index grade data → check loaded rows
+        return group.rows.some(r => r.isGraded && String(r.gradeValue) === String(sub));
+      }
+
+      if (type === 'raw') {
+        // Mirror graded exactly: index first (SQL-parsed from all listings in the group),
+        // then fall back to loaded row data (client-side title parsing).
+        // If neither has positive evidence → false (exclude), same as graded.
+        if (idx && idx.rawConditions.length > 0) {
+          return idx.rawConditions.includes(sub);
+        }
+        // No index condition data → check loaded rows (includes placeholder + any expanded rows)
+        return group.rows.some(r => !r.isGraded && r.rawCondition === sub);
+      }
+      return true;
+    }
+
+    // Collect all grade values available across displayed groups (from index),
+    // sorted descending. Used to populate grade sub-chips without requiring expansion.
+    function getAllGradeValues() {
+      const seen = new Set();
+      const vals = [];
+      for (const g of state.filtered) {
+        if (!groupMatchesConditionType(g)) continue;
+        // From index
+        const idx = conditionIndex.get(g.groupKey);
+        if (idx) {
+          for (const v of idx.gradeValues) {
+            const k = String(v);
+            if (!seen.has(k)) { seen.add(k); vals.push(v); }
+          }
+        }
+        // From loaded rows as fallback
+        for (const r of (g.rows || [])) {
+          if (r.isGraded && r.gradeValue != null) {
+            const k = String(r.gradeValue);
+            if (!seen.has(k)) { seen.add(k); vals.push(r.gradeValue); }
+          }
+        }
+      }
+      return vals.sort((a, b) => b - a);
+    }
+
+    function renderConditionFilter() {
+      const bar = document.getElementById('conditionBar');
+      if (!bar) return;
+      const { type, sub } = state.conditionFilter;
+
+      const typeChips = ['all', 'raw', 'graded'].map(t =>
+        `<button class="cond-chip cond-chip-type ${type === t ? 'active' : ''}" data-cond-type="${t}">${
+          t === 'all' ? 'All' : t === 'raw' ? '🃏 Raw' : '🏆 Graded'
+        }</button>`
+      ).join('');
+
+      let subHtml = '';
+      if (type === 'raw') {
+        // data-cond-sub values are lowercase (matching rawCondition on rows + conditionIndex);
+        // display labels are uppercase for readability.
+        const fixed = ['nm', 'lp', 'mp', 'hp'];
+        subHtml = `<div class="cond-sub-bar">${fixed.map(c =>
+          `<button class="cond-chip ${sub === c ? 'active' : ''}" data-cond-sub="${c}">${c.toUpperCase()}</button>`
+        ).join('')}</div>`;
+      } else if (type === 'graded') {
+        const gradeVals = getAllGradeValues();
+        subHtml = gradeVals.length
+          ? `<div class="cond-sub-bar">${gradeVals.slice(0, 12).map(v =>
+              `<button class="cond-chip ${String(sub) === String(v) ? 'active' : ''}" data-cond-sub="${v}">${v}</button>`
+            ).join('')}</div>`
+          : `<div class="cond-sub-bar"><span class="cond-loading">Loading grades…</span></div>`;
+      }
+
+      bar.innerHTML = `<div class="cond-bar">${typeChips}${subHtml}</div>`;
+
+      // Show/hide clear button based on whether a filter is active
+      const clearBtn = document.getElementById('condClearBtn');
+      if (clearBtn) {
+        const isActive = type !== 'all';
+        clearBtn.style.display = isActive ? '' : 'none';
+        clearBtn.onclick = () => {
+          state.conditionFilter = { type: 'all', sub: null };
+          render();
+        };
+      }
+
+      bar.querySelectorAll('[data-cond-type]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          state.conditionFilter = { type: btn.dataset.condType, sub: null };
+          // Kick off index fetch when entering Raw or Graded so chips populate fast
+          if (state.conditionFilter.type !== 'all') {
+            ensureConditionIndex().then(() => render());
+          }
+          render();
+        });
+      });
+      bar.querySelectorAll('[data-cond-sub]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const newSub = btn.dataset.condSub;
+          const curSub = state.conditionFilter.sub;
+          state.conditionFilter = { ...state.conditionFilter, sub: String(curSub) === String(newSub) ? null : newSub };
+          render();
+        });
+      });
+    }
+
+    function renderStats(condGroupCount, condListingCount) {
+      const totalGroups   = condGroupCount  ?? state.filtered.length;
+      const totalRows     = condListingCount ?? state.filtered.reduce((sum, g) => sum + (g.totalListingCount ?? g.rows.length), 0);
+      const selectedLabel = state.selected
+        ? (state.selected.title?.length > 50 ? state.selected.title.slice(0, 50) + '…' : state.selected.title) || state.selected.id
+        : 'None';
+      els.statsBar.innerHTML = `
+        <span class="chip">${totalGroups} groups</span>
+        <span class="chip">${totalRows} listings</span>
+        <span class="chip">Sort: ${state.sortKey} ${state.sortDir}</span>
+        <span class="chip">Selected: ${selectedLabel}</span>
+      `;
+    }
+
+        // Renders only the inner HTML for a group's .rows container.
+        // Used by the expand handler so it can do a targeted DOM update
+        // instead of calling render(), which rebuilds every group in the list.
+        function renderGroupRowsInner(group) {
+          const sortedRows = getSortedRows(group.rows);
+          const condRows = getConditionFilteredRows(sortedRows);
+          const hasSubFilter = !!state.conditionFilter.sub;
+          const displayRows = hasSubFilter
+            ? condRows
+            : (condRows.length > 0 ? condRows : sortedRows);
+          const emptyNote = hasSubFilter && displayRows.length === 0
+            ? `<div class="empty" style="padding:.5rem 1rem;font-size:var(--text-xs);color:var(--color-text-faint);">Expand to load ${state.conditionFilter.sub} listings</div>`
+            : '';
+          return emptyNote + displayRows.map(row => `
+            <div class="row ${state.selected?.id === row.id ? 'selected' : ''}" data-row-id="${buildDisplayListingId(row)}">
+              <button class="thumb preview-thumb" data-preview="${buildDisplayListingId(row)}" aria-label="Preview images for ${row.title}">
+                ${row.images?.[0] ? `<img src="${row.images[0]}" alt="${row.title}" loading="lazy" width="72" height="72" />` : 'IMG'}
+              </button>
+              <div class="title-cell">
+                <strong><a href="${row.url}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;">${row.title}</a></strong>
+              </div>
+              <div class="date-cell">${formatDateListed(row.firstSeenAt)}</div>
+              <div class="seller-cell"><a href="${row.sellerUrl || row.url}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;">${row.seller}</a></div>
+              <div class="price-cell price">${formatPrice(row.price)}</div>
+              <div class="median-cell">${renderRowMedianBadge(row, group)}</div>
+            </div>
+          `).join('');
+        }
+
+        function render({ collapseAll = false } = {}) {
+      // Preserve which groups are currently expanded before rebuilding the DOM
+      const expandedKeys = new Set(
+        [...document.querySelectorAll('.group.expanded')].map(el => el.dataset.groupKey)
+      );
+      const isFirstRender = document.querySelectorAll('.group').length === 0;
+
+      // Apply condition type + sub-condition filter at the group level
+      const condFilteredGroups = state.conditionFilter.type === 'all'
+        ? state.filtered
+        : state.filtered.filter(g => groupMatchesConditionType(g) && groupMatchesSubCondition(g));
+
+      // Pass condition-aware counts to stats bar
+      const condListingCount = condFilteredGroups.reduce((sum, g) => sum + (g.totalListingCount ?? g.rows.length), 0);
+      renderStats(condFilteredGroups.length, condListingCount);
+      renderConditionFilter();
+      if (!state.filtered.length) {
+        const emptyMessages = {
+          loading: 'Loading current listings…',
+          error: `Couldn't load listings. <button onclick="window._retryLoad&&window._retryLoad()" style="background:var(--color-surface-offset);border:1px solid var(--color-border);border-radius:3px;padding:2px 8px;cursor:pointer;font:inherit;color:inherit;margin-left:.5rem;">Try again</button>`,
+          ready: 'No groups match this search yet. Try a broader Charizard search.'
+        };
+        els.results.innerHTML = `<div class="empty">${emptyMessages[state.loadStatus] || emptyMessages.ready}</div>`;
+        return;
+      }
+
+      // Group-level sort
+      const displayGroups = GROUP_SORT_KEYS.has(state.sortKey)
+        ? [...condFilteredGroups].sort((a, b) => {
+            let av, bv;
+            if (state.sortKey === 'listings') {
+              av = a.totalListingCount ?? a.rows.length;
+              bv = b.totalListingCount ?? b.rows.length;
+            } else if (state.sortKey === 'groupprice') {
+              av = Number.isFinite(a.rows[0]?.price) ? a.rows[0].price : Infinity;
+              bv = Number.isFinite(b.rows[0]?.price) ? b.rows[0].price : Infinity;
+            } else {
+              av = Number.isFinite(a.rows[0]?.medianPct) ? a.rows[0].medianPct : Infinity;
+              bv = Number.isFinite(b.rows[0]?.medianPct) ? b.rows[0].medianPct : Infinity;
+            }
+            if (!Number.isFinite(av) && !Number.isFinite(bv)) return 0;
+            if (!Number.isFinite(av)) return 1;
+            if (!Number.isFinite(bv)) return -1;
+            return (av - bv) * (state.sortDir === 'asc' ? 1 : -1);
+          })
+        : condFilteredGroups;
+
+      if (!displayGroups.length && state.conditionFilter.type !== 'all') {
+        const filterLabel = state.conditionFilter.sub
+          ? `${state.conditionFilter.type === 'raw' ? state.conditionFilter.sub : `Grade ${state.conditionFilter.sub}`}`
+          : state.conditionFilter.type;
+        els.results.innerHTML = `<div class="empty">No groups found matching "${filterLabel}". Try a different condition or expand some groups.</div>`;
+        return;
+      }
+
+      els.results.innerHTML = displayGroups.map((group, i) => {
+        const sortedRows = getSortedRows(group.rows);
+        const condRows = getConditionFilteredRows(sortedRows);
+        // For row display: show condition-filtered rows when available; fall back to all only if no sub-filter
+        const hasSubFilter = !!state.conditionFilter.sub;
+        const displayRows = hasSubFilter
+          ? condRows   // only matching rows (may be empty until group expanded)
+          : (condRows.length > 0 ? condRows : sortedRows);
+        const best = displayRows[0] || sortedRows[0];
+        const condMedian = state.conditionFilter.type !== 'all' && condRows.length > 0
+          ? medianOf(condRows.map(r => r.price).filter(v => Number.isFinite(v)))
+          : undefined;
+        const displayGroupLabel = buildDisplayGroupLabel(group);
+        const displayItemId = buildDisplayItemId(group);
+        const isExpanded = (isFirstRender || collapseAll) ? i === 0 : expandedKeys.has(group.groupKey);
+        const condBadge = condRows.length > 0 && condRows.length < sortedRows.length
+          ? ` · <span style="color:var(--color-primary);font-size:.75em;">${condRows.length}/${sortedRows.length}</span>`
+          : '';
+        const emptyNote = hasSubFilter && displayRows.length === 0
+          ? `<div class="empty" style="padding:.5rem 1rem;font-size:var(--text-xs);color:var(--color-text-faint);">Expand to load ${state.conditionFilter.sub} listings</div>`
+          : '';
+        return `
+          <article class="group ${isExpanded ? 'expanded' : ''}" data-group-key="${group.groupKey}">
+            <button class="group-summary" data-toggle-group="${group.groupKey}">
+              <span class="caret">${isExpanded ? '▼' : '▶'}</span>
+              <span class="group-title">
+                <strong>${displayGroupLabel}</strong>
+                <span class="subtle">Item ID: ${displayItemId} · Listings: ${group.totalListingCount ?? group.rows.length}${condBadge}</span>
+              </span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span class="metric subtle-block"><strong class="price">${formatPrice(best.price)}</strong><span class="subtle">Best price</span></span>
+              ${renderMarketPriceMetric(group, condMedian)}
+            </button>
+            <div class="rows">
+              ${emptyNote}
+              ${displayRows.map(row => `
+                <div class="row ${state.selected?.id === row.id ? 'selected' : ''}" data-row-id="${buildDisplayListingId(row)}">
+                  <button class="thumb preview-thumb" data-preview="${buildDisplayListingId(row)}" aria-label="Preview images for ${row.title}">
+                    ${row.images?.[0] ? `<img src="${row.images[0]}" alt="${row.title}" loading="lazy" width="72" height="72" />` : 'IMG'}
+                  </button>
+                  <div class="title-cell">
+                    <strong><a href="${row.url}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;">${row.title}</a></strong>
+                  </div>
+                  <div class="date-cell">${formatDateListed(row.firstSeenAt)}</div>
+                  <div class="seller-cell"><a href="${row.sellerUrl || row.url}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;">${row.seller}</a></div>
+                  <div class="price-cell price">${formatPrice(row.price)}</div>
+                  <div class="median-cell">${renderRowMedianBadge(row, group)}</div>
+                </div>
+              `).join('')}
+            </div>
+          </article>
+        `;
+      }).join('');
+
+                  document.querySelectorAll('[data-toggle-group]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          // Only toggle when the click is somewhere inside this header button
+          if (!e.target.closest('[data-toggle-group]')) return;
+          e.preventDefault();
+          const group = btn.closest('.group');
+          group.classList.toggle('expanded');
+          group.querySelector('.caret').textContent = group.classList.contains('expanded') ? '▼' : '▶';
+          if (!group.classList.contains('expanded')) return;
+
+          const groupKey = group.dataset.groupKey;
+          const groupLabel = group.querySelector('.group-title strong')?.textContent || '';
+          const groupObj = state.groups.find(g => g.groupKey === groupKey);
+
+          // Most groups only carry their single "best" placeholder row until
+          // expanded -- fetch the rest now via get_group_listings() rather
+          // than ever having loaded all listings up front.
+          if (groupObj && !groupObj.rowsLoaded) {
+            const groupEl = group;
+            const rowsEl = groupEl.querySelector('.rows');
+            rowsEl.innerHTML = '<div class="empty" style="padding:1rem;">Loading listings…</div>';
+            const tExpand = performance.now();
+            let loaded = false;
+            try {
+              loaded = await loadGroupRows(groupObj);
+            } catch (err) {
+              console.error(`[#35] loadGroupRows failed for ${groupKey}:`, err);
+              rowsEl.innerHTML = '<div class="empty" style="padding:.5rem 1rem;font-size:var(--text-xs);color:var(--color-red);">Failed to load listings. Check console.</div>';
+              return;
+            }
+            if (loaded) {
+              augmentGroupRows();
+              // Surgical update: replace only this group's .rows div rather than
+              // calling render(), which rebuilds the entire results DOM and gets
+              // progressively slower as more groups accumulate loaded rows.
+              const tDom = performance.now();
+              rowsEl.innerHTML = renderGroupRowsInner(groupObj);
+              attachGroupListeners(groupEl);
+              const domMs = Math.round(performance.now() - tDom);
+              const totalMs = Math.round(performance.now() - tExpand);
+              console.log(`[perf #35] DOM render (renderGroupRowsInner + attachListeners): ${domMs}ms`);
+              console.log(`[perf #35] Total expand time for "${groupKey}": ${totalMs}ms`);
+            } else {
+              rowsEl.innerHTML = '<div class="empty" style="padding:.5rem 1rem;font-size:var(--text-xs);color:var(--color-text-faint);">No listings found.</div>';
+            }
+          }
+
+          // Load price history for the group that just expanded
+          loadPriceHistory(groupKey, groupLabel);
+        });
+      });
+
+                              document.querySelectorAll('.row').forEach(rowEl => {
+        rowEl.addEventListener('click', e => {
+          // Don't let row clicks reach the group header
+          e.stopPropagation();
+          // Let real links and preview buttons do their own thing
+          if (e.target.closest('a')) return;
+          if (e.target.closest('.preview-thumb')) return;
+
+          const row = findRow(rowEl.dataset.rowId);
+          if (!row) return;
+
+          setSelected(row);
+          render();
+          saveUiState();
+        });
+      });
+
+      document.querySelectorAll('.preview-thumb').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const row = findRow(btn.dataset.preview);
+          setSelected(row);
+          openModal(row.images, row.title);
+        });
+      });
+
+      document.querySelectorAll('.row a').forEach(link => {
+        link.addEventListener('click', e => {
+          e.stopPropagation();
+          saveUiState();
+        });
+      });
+    }
+
+    function findRow(id) {
+      for (const group of state.groups) {
+        const row = group.rows.find(r => r.id === id);
+        if (row) return row;
+      }
+      return null;
+    }
+
+    // Attach row/preview/link listeners scoped to a single group element.
+    // Called after a targeted .rows innerHTML update so those rows are
+    // interactive without needing a full render() pass.
+    function attachGroupListeners(containerEl) {
+      containerEl.querySelectorAll('.row').forEach(rowEl => {
+        rowEl.addEventListener('click', e => {
+          e.stopPropagation();
+          if (e.target.closest('a')) return;
+          if (e.target.closest('.preview-thumb')) return;
+          const row = findRow(rowEl.dataset.rowId);
+          if (!row) return;
+          setSelected(row);
+          render();
+          saveUiState();
+        });
+      });
+      containerEl.querySelectorAll('.preview-thumb').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const row = findRow(btn.dataset.preview);
+          if (!row) return;
+          setSelected(row);
+          openModal(row.images, row.title);
+        });
+      });
+      containerEl.querySelectorAll('.row a').forEach(link => {
+        link.addEventListener('click', e => {
+          e.stopPropagation();
+          saveUiState();
+        });
+      });
+    }
+
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.sort;
+        if (state.sortKey === key) {
+          state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.sortKey = key;
+          state.sortDir = key === 'median' || key === 'price' ? 'asc' : 'asc';
+        }
+        render();
+      });
+    });
+
+
+    document.addEventListener('click', e => {
+      const anchor = e.target.closest('a');
+      if (!anchor) return;
+      if (anchor.closest('.results-pane') || anchor.closest('.selection-bar')) {
+        saveUiState();
+      }
+    });
+
+    els.searchBtn.addEventListener('click', applySearch);
+    els.searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') applySearch(); });
+    document.getElementById('analyticsBtn').addEventListener('click', () => {
+      state.analyticsVisible = !state.analyticsVisible;
+      renderAnalytics();
+    });
+    els.toggleDebug.addEventListener('click', () => {
+      state.debugVisible = !state.debugVisible;
+      if (state.selected) { setSelected(state.selected); } else { els.debugPanel.innerHTML = `<dt>Debug</dt><dd>${state.debugVisible ? 'Select a row' : 'Off'}</dd>`; }
+    });
+    els.previewBtn.addEventListener('click', () => { if (state.selected) openModal(state.selected.images, state.selected.title); });
+    // Detail pane inline image viewer nav
+    els.detailImageStage.addEventListener('click', () => { if (state.selected?.images?.length) openModal(state.selected.images, state.selected.title); });
+    els.detailPrevImg.addEventListener('click', () => {
+      const imgs = state.selected?.images || [];
+      if (!imgs.length) return;
+      state.detailImageIndex = Math.max(0, state.detailImageIndex - 1);
+      updateDetailImage();
+    });
+    els.detailNextImg.addEventListener('click', () => {
+      const imgs = state.selected?.images || [];
+      if (!imgs.length) return;
+      state.detailImageIndex = Math.min(imgs.length - 1, state.detailImageIndex + 1);
+      updateDetailImage();
+    });
+    els.prevImg.addEventListener('click', () => { if (!state.modalImages.length) return; state.modalIndex = (state.modalIndex - 1 + state.modalImages.length) % state.modalImages.length; updateModal(); });
+    els.nextImg.addEventListener('click', () => { if (!state.modalImages.length) return; state.modalIndex = (state.modalIndex + 1) % state.modalImages.length; updateModal(); });
+    els.closeModal.addEventListener('click', closeModal);
+    els.imageModal.addEventListener('click', e => { if (e.target === els.imageModal) closeModal(); });
+    document.addEventListener('keydown', e => {
+      const modalOpen = els.imageModal.classList.contains('open');
+      const searchFocused = document.activeElement === els.searchInput;
+
+      // ── Modal mode: image nav + row switching ──
+      if (modalOpen) {
+        if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); closeModal(); }
+        if (e.key === 'ArrowLeft') els.prevImg.click();
+        if (e.key === 'ArrowRight') els.nextImg.click();
+        if (e.key === 'ArrowUp')   { e.preventDefault(); selectRelativeRow(-1); openModal(state.selected?.images || [], state.selected?.title || 'Image preview'); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); selectRelativeRow(1);  openModal(state.selected?.images || [], state.selected?.title || 'Image preview'); }
+        return;
+      }
+
+      // ── Spacebar: open modal for selected listing (skip if search focused) ──
+      if (e.key === ' ' && !searchFocused) {
+        if (state.selected?.images?.length) {
+          e.preventDefault();
+          openModal(state.selected.images, state.selected.title);
+        }
+        return;
+      }
+
+      // ── List mode: arrow key row navigation (skip when search input is focused) ──
+      if (searchFocused) return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+
+      e.preventDefault();
+      const delta = e.key === 'ArrowUp' ? -1 : 1;
+
+      // Build a flat ordered list of visible rows across all filtered groups,
+      // respecting the active condition filter so hidden rows are skipped.
+      const allRows = state.filtered.flatMap(g =>
+        getConditionFilteredRows(getSortedRows(g.rows)).map(r => ({ ...r, _groupKey: g.groupKey }))
+      );
+      if (!allRows.length) return;
+
+      const cur = allRows.findIndex(r => r.id === state.selected?.id);
+      const nextIdx = cur < 0 ? 0 : Math.max(0, Math.min(allRows.length - 1, cur + delta));
+      const next = allRows[nextIdx];
+      if (!next || next.id === state.selected?.id) return;
+
+      // Auto-expand the target group before render reads DOM expanded state
+      const groupEl = document.querySelector(`[data-group-key="${next._groupKey}"]`);
+      if (groupEl && !groupEl.classList.contains('expanded')) {
+        groupEl.classList.add('expanded');
+        const caret = groupEl.querySelector('.caret');
+        if (caret) caret.textContent = '▼';
+        // Load price history for the newly expanded group
+        const groupTitle = groupEl.querySelector('.group-title strong')?.textContent || '';
+        loadPriceHistory(next._groupKey, groupTitle);
+      }
+
+      setSelected(next);
+      render();
+      saveUiState();
+
+      // Scroll the newly selected row into view after the DOM rebuilds
+      requestAnimationFrame(() => {
+        const rowEl = document.querySelector(`[data-row-id="${next.id}"]`);
+        if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    });
+
+    const savedState = readUiState();
+    if (savedState?.sortKey) state.sortKey = savedState.sortKey;
+    if (savedState?.sortDir) state.sortDir = savedState.sortDir;
+    if (typeof savedState?.debugVisible === 'boolean') state.debugVisible = savedState.debugVisible;
+    if (typeof savedState?.search === 'string') els.searchInput.value = savedState.search;
+    const initialRow = savedState?.selectedId ? findRow(savedState.selectedId) : (state.groups[0]?.rows?.[0] || state.groups.flatMap(g => g.rows)[0]);
+    if (initialRow) setSelected(initialRow);
+    renderFilterSidebar();
+    render(); // Paint loading state immediately — applySearch() is called once data arrives
+
+    // Load real data + server-computed market prices. Demo mode (?demo=1)
+    // skips this entirely and just shows sample data, for testing/screenshots.
+    // For real visitors: on success, replace the loading state with real
+    // groups; on failure, show an honest error rather than silently leaving
+    // the page stuck on "Loading…" or substituting fake listings.
+    if (!isDemoMode) {
+      // Fetch catalog independently so filters always populate, even if listings fail
+      fetchFilterCatalog().then(catalogRows => {
+        buildFilterCatalog(catalogRows);
+        buildFilterTree();
+        renderFilterSidebar();
+        // If groups are already loaded, augment them now
+        if (state.groups.length > 0) { augmentGroupRows(); applySearch(); }
+      }).catch(err => console.warn('Filter catalog load failed:', err));
+
+      // Named so the "Try again" button and auto-retry can both call it.
+      // dataLoadActive prevents concurrent loads (e.g. rapid button clicks
+      // while a retry is already in flight).
+      let dataLoadActive = false;
+      async function loadLiveData() {
+        if (dataLoadActive) return;
+        dataLoadActive = true;
+        // If called from the "Try again" button, reset to loading state first
+        // so the UI doesn't stay stuck on the error message during the retry.
+        if (state.loadStatus === 'error') { state.loadStatus = 'loading'; render(); }
+
+        // Two attempts: immediate first try, then one auto-retry after 1.5 s.
+        // The 1.5 s delay handles cold Supabase/PG connections and transient
+        // network hiccups that consistently cause the first call to fail but
+        // succeed on the second — matching the "works after refresh" symptom.
+        // state.loadStatus stays 'loading' during the retry so the user just
+        // sees the normal loading spinner, not a flash of the error state.
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            if (attempt > 1) await new Promise(r => setTimeout(r, 1500));
+            const [summaries, statsByKey] = await Promise.all([
+              fetchGroupSummaries(),
+              fetchMarketStats(),
+            ]);
+            state.groups = mapSummariesToGroups(summaries, statsByKey);
+            // Pre-fetch condition index so grade chips and group filtering work immediately
+            ensureConditionIndex(); // intentionally not awaited — updates chips when ready via render()
+            if (filterCatalog.size > 0) augmentGroupRows();
+            state.loadStatus = 'ready'; // even if liveRows is empty, that's a real "nothing yet", not an error
+            await applySearch(); // await so state.filtered is populated before we check it below
+            renderFilterSidebar();
+            renderAnalytics(); // refresh analytics panel now that stats data is available
+            // Auto-load price history for the first group (it auto-expands on first render)
+            if (state.filtered.length > 0) {
+              const first = state.filtered[0];
+              // Auto-expanding group needs its full row list, not just the
+              // "best" placeholder row used for the collapsed summary view.
+              await loadGroupRows(first);
+              augmentGroupRows();
+              await applySearch(); // session #54: was not awaited; fixed for correctness
+              loadPriceHistory(first.groupKey, first.groupLabel);
+            }
+            break; // success — don't retry
+          } catch (err) {
+            console.error(`Live data load attempt ${attempt} failed.`, err);
+            if (attempt === 2) {
+              // Both attempts failed — surface the error so the user can retry manually
+              state.loadStatus = 'error';
+              render();
+            }
+          }
+        }
+        dataLoadActive = false;
+      }
+      window._retryLoad = loadLiveData; // exposed for the "Try again" button in render()
+      loadLiveData();
+    }
+  </script>
+</body>
+</html>
