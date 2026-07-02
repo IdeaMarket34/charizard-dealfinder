@@ -18,6 +18,16 @@ OCR output:
   - card_number_match    : "confirm" | "conflict" | "not_found"
                            compared against listing_parses.card_number
 
+DINOv2 awareness (added post session #35):
+  This worker does NOT run DINOv2 — that runs locally on the PC via
+  embed_listing_images.py, which writes results to listing_card_matches
+  with match_method='dinov2_image' and fills listing_parses.matched_card_id
+  for auto_accept matches.
+  This worker loads any existing dinov2_image matches for the current batch
+  upfront and records them in the image_analysis jsonb for visibility. It
+  also does a belt-and-suspenders fill of matched_card_id from a dinov2
+  auto_accept match if the field is still NULL when this worker runs.
+
 Triggered by pg_cron → trigger_github_workflow('image-analysis.yml').
 """
 
@@ -109,6 +119,26 @@ def fetch_reference_phashes() -> list[dict]:
         joined = row.pop("pokemon_cards", None) or {}
         row["card_number"] = joined.get("card_number")
     return rows
+
+
+def fetch_dinov2_matches(market_listing_ids: list[int]) -> dict[int, dict]:
+    """
+    Batch-load any existing dinov2_image matches for the current batch from
+    listing_card_matches. Returns a dict keyed by market_listing_id.
+
+    One query for the whole batch — zero extra per-row queries downstream.
+    Called at the start of main() alongside fetch_reference_phashes().
+    """
+    if not market_listing_ids:
+        return {}
+    resp = (
+        supabase.table("listing_card_matches")
+        .select("market_listing_id, pokemon_card_id, match_confidence, evidence_json")
+        .eq("match_method", "dinov2_image")
+        .in_("market_listing_id", market_listing_ids)
+        .execute()
+    )
+    return {row["market_listing_id"]: row for row in (resp.data or [])}
 
 
 # ── Image download ────────────────────────────────────────────────────────────
@@ -284,10 +314,14 @@ def phash_card_number_verdict(ref_card_num: str | None, parse_num: str | None) -
 
 # ── Row processing ────────────────────────────────────────────────────────────
 
-def process_row(row: dict, reference_library: list[dict]) -> dict:
+def process_row(row: dict, reference_library: list[dict], dinov2_match: dict | None) -> dict:
     """
     Download and analyze one listing's primary image.
     Returns the full image_analysis payload to be stored as jsonb.
+
+    dinov2_match: pre-loaded listing_card_matches row for this listing with
+    match_method='dinov2_image', or None if the PC hasn't embedded this image
+    yet. Recorded in the payload for visibility; not used to gate anything here.
     """
     url = row["primary_image_url"]
     analysis: dict = {
@@ -363,6 +397,21 @@ def process_row(row: dict, reference_library: list[dict]) -> dict:
                     f"parser_card_number={row.get('card_number')!r} "
                     f"card_key={match['card_key']!r}"
                 )
+
+    # Record any pre-existing DINOv2 match in the payload for visibility.
+    # The PC's embed_listing_images.py already wrote this to listing_card_matches
+    # and filled matched_card_id for auto_accept tier — we're just surfacing it
+    # here so the image_analysis jsonb tells the full story in one place.
+    if dinov2_match:
+        ev = dinov2_match.get("evidence_json") or {}
+        analysis["dinov2_match"] = {
+            "pokemon_card_id": dinov2_match["pokemon_card_id"],
+            "item_key":        ev.get("item_key"),
+            "similarity":      ev.get("similarity"),
+            "distance":        ev.get("distance"),
+            "tier":            ev.get("tier"),
+            "model_version":   ev.get("model_version"),
+        }
 
     return analysis
 
@@ -468,6 +517,21 @@ def write_result(parse_id: int, market_listing_id: int, analysis: dict) -> None:
                 "reviewer_note": note,
             }, on_conflict="listing_parse_id").execute()
 
+    # Belt-and-suspenders: if embed_listing_images.py wrote a dinov2 auto_accept
+    # match but matched_card_id is still NULL (e.g. worker ran before the PC
+    # script on this listing), fill it now. Never overwrites an existing value.
+    dinov2_match = analysis.get("dinov2_match")
+    if dinov2_match and dinov2_match.get("tier") == "auto_accept":
+        if "matched_card_id" not in update:  # phash didn't already claim the slot
+            current = (
+                supabase.table("listing_parses")
+                .select("matched_card_id")
+                .eq("id", parse_id)
+                .execute()
+            )
+            if current.data and current.data[0]["matched_card_id"] is None:
+                update["matched_card_id"] = dinov2_match["pokemon_card_id"]
+
     supabase.table("listing_parses").update(update).eq("id", parse_id).execute()
 
 
@@ -488,15 +552,22 @@ def main() -> None:
     batch = fetch_batch()
     log.info(f"Rows to process: {len(batch)}")
 
+    # Batch-load DINOv2 matches for all rows upfront — one query, zero per-row overhead.
+    market_ids = [row["market_listing_id"] for row in batch]
+    dinov2_matches = fetch_dinov2_matches(market_ids)
+    log.info(f"DINOv2 matches pre-loaded for {len(dinov2_matches)} listings in batch")
+
     confirmed = conflicts = junk_flagged = errors = 0
     phash_auto_accepted = phash_candidates = 0
     phash_band_12_18 = 0  # TEMP (session #32 follow-up) — see PHASH_BAND_CHECK log lines
+    dinov2_present = 0    # listings in this batch that already have a dinov2_image match
 
     for row in batch:
         parse_id = row["id"]
         market_listing_id = row["market_listing_id"]
+        dinov2_match = dinov2_matches.get(market_listing_id)
         try:
-            analysis = process_row(row, reference_library)
+            analysis = process_row(row, reference_library, dinov2_match)
             write_result(parse_id, market_listing_id, analysis)
 
             match = analysis.get("card_number_match")
@@ -517,6 +588,9 @@ def main() -> None:
             if phash_distance is not None and 12 <= phash_distance <= 18:
                 phash_band_12_18 += 1
 
+            if analysis.get("dinov2_match"):
+                dinov2_present += 1
+
             time.sleep(0.05)  # light throttle on image CDN
 
         except Exception as e:
@@ -529,6 +603,7 @@ def main() -> None:
         f"phash_auto_accepted={phash_auto_accepted} "
         f"phash_candidates={phash_candidates} "
         f"phash_band_12_18={phash_band_12_18} "
+        f"dinov2_present={dinov2_present} "
         f"total={len(batch)}"
     )
 
